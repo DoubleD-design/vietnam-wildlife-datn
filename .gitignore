@@ -3,6 +3,7 @@ Training/
 Preprocessed/
 .venv/
 **/.env
+**/.env.*
 *.pth
 *.bin
 .DS_Store
