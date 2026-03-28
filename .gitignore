@@ -14,4 +14,7 @@ frontend/dist/
 # Java
 wildlife-backend/target/
 
+#AI Server
+wildlife-ai/model/
+
 .DS_Store

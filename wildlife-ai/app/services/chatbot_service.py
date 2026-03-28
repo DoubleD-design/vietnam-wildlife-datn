@@ -5,6 +5,8 @@ from app.models.schemas import (
     ChatQueryResponse,
     SpeciesCandidateResponse,
 )
+from app.core.config import settings
+from app.services.image_recognition_service import ImageRecognitionService
 from app.services.rag_pipeline_service import OUT_OF_SCOPE_MESSAGE, RagPipelineService
 from app.services.session_store import ChatSessionState
 from app.services.species_service import SpeciesService
@@ -17,6 +19,7 @@ class ChatbotService:
     def __init__(self, species_service: SpeciesService) -> None:
         self.species_service = species_service
         self.rag_service = RagPipelineService()
+        self.image_recognition = ImageRecognitionService()
         self.sessions: dict[str, ChatSessionState] = {}
 
     def query(self, req: ChatQueryRequest) -> ChatQueryResponse:
@@ -89,7 +92,33 @@ class ChatbotService:
                 candidates=[],
             )
 
-        cards = self.species_service.top_candidates(6)
+        predictions: list[tuple[str, float]] = []
+        try:
+            predictions = self.image_recognition.predict(
+                req.imageUrl or "", top_k=settings.vision_top_k
+            )
+        except Exception:
+            predictions = []
+
+        cards = self.species_service.candidates_from_predicted_names(
+            predictions, limit=6
+        )
+
+        if len(cards) < 6:
+            existing_ids = {card.id for card in cards}
+            for card in self.species_service.top_candidates(6):
+                if card.id in existing_ids:
+                    continue
+                cards.append(card)
+                existing_ids.add(card.id)
+                if len(cards) >= 6:
+                    break
+
+        if not cards and predictions:
+            cards = self.species_service.candidates_from_predicted_names(
+                predictions, limit=6
+            )
+
         candidates = [
             SpeciesCandidateResponse(
                 speciesId=card.id,
@@ -122,8 +151,8 @@ class ChatbotService:
         return ChatQueryResponse(
             status="NEED_SPECIES_CONFIRM",
             message=message,
-            activeSpeciesId=state.current_species_id,
-            activeSpeciesName=state.current_species_name,
+            activeSpeciesId=None,
+            activeSpeciesName=None,
             candidates=candidates,
         )
 
@@ -139,12 +168,15 @@ class ChatbotService:
             state.current_species_name = mentioned.get(
                 "common_name_vi"
             ) or mentioned.get("scientific_name")
-            message = "Đã chuyển sang loài bạn vừa đề cập trong câu hỏi."
+            message = f"Tôi đang trả lời theo loài {state.current_species_name}."
         elif state.current_species_id:
             active_species = self.species_service.get_species_doc(
                 state.current_species_id
             )
-            message = "Đã xử lý câu hỏi theo ngữ cảnh loài đang chọn."
+            state.current_species_name = active_species.get(
+                "common_name_vi"
+            ) or active_species.get("scientific_name")
+            message = f"Tôi đang trả lời theo loài {state.current_species_name}."
         else:
             message = "Đã xử lý câu hỏi."
 

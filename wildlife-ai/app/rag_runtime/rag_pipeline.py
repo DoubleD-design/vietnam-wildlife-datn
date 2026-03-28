@@ -149,7 +149,7 @@ def _build_species_raw_collection():
 
 
 def _find_raw_profile_by_species(species_name: str) -> dict[str, Any]:
-    if not SPECIES_RAW_COLLECTION:
+    if SPECIES_RAW_COLLECTION is None:
         return {}
 
     target = (species_name or "").strip()
@@ -247,12 +247,11 @@ SPECIES_RAW_COLLECTION = _build_species_raw_collection()
 
 API_KEY = os.getenv("CEREBRAS_API_KEY", "").strip()
 if not API_KEY:
-    raise SystemExit(
-        "Thiếu CEREBRAS_API_KEY. Hãy set env var trước khi chạy, ví dụ:\n"
-        "export CEREBRAS_API_KEY='your_key'"
-    )
-client = Cerebras(api_key=API_KEY)
-print(f"✅ Ready! (provider: cerebras, model: {CEREBRAS_MODEL})\n")
+    client = None
+    print("⚠️  Thiếu CEREBRAS_API_KEY, sẽ chạy chế độ fallback (không gọi LLM API).")
+else:
+    client = Cerebras(api_key=API_KEY)
+    print(f"✅ Ready! (provider: cerebras, model: {CEREBRAS_MODEL})\n")
 
 
 # ============================================================
@@ -451,6 +450,9 @@ def _build_fallback_answer(
 
 
 def _generate_answer_with_retry(prompt: str) -> str:
+    if client is None:
+        raise RuntimeError("CEREBRAS_API_KEY is missing")
+
     last_error = None
     for attempt in range(MAX_API_RETRIES + 1):
         try:

@@ -9,3 +9,7 @@ numpy>=1.26.0
 faiss-cpu>=1.8.0
 sentence-transformers>=3.0.0
 cerebras-cloud-sdk>=1.0.0
+torch>=2.3.0
+torchvision>=0.18.0
+open_clip_torch>=2.26.1
+Pillow>=10.0.0

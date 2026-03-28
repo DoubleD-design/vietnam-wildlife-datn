@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from bson import ObjectId
@@ -88,6 +89,67 @@ class SpeciesService:
     def top_candidates(self, limit: int = 6) -> list[SpeciesCardResponse]:
         docs = list(self.collection.find({}).limit(limit))
         return [self._to_card(doc) for doc in docs]
+
+    def candidates_from_predicted_names(
+        self, predictions: list[tuple[str, float]], limit: int = 6
+    ) -> list[SpeciesCardResponse]:
+        cards: list[SpeciesCardResponse] = []
+        seen_ids: set[str] = set()
+
+        for predicted_name, _ in predictions:
+            normalized = self._normalize_species_text(predicted_name)
+            if not normalized:
+                continue
+
+            doc = self.collection.find_one(
+                {
+                    "scientific_name": {
+                        "$regex": f"^{re.escape(normalized)}$",
+                        "$options": "i",
+                    }
+                }
+            )
+
+            if doc is None:
+                # Fallback for punctuation/spacing mismatches between class mapping and DB.
+                cursor = self.collection.find(
+                    {},
+                    {
+                        "_id": 1,
+                        "scientific_name": 1,
+                        "common_name_vi": 1,
+                        "conservation": 1,
+                        "image_url": 1,
+                        "media_assets": 1,
+                    },
+                )
+                for candidate in cursor:
+                    sci = self._normalize_species_text(
+                        str(candidate.get("scientific_name") or "")
+                    )
+                    if sci == normalized:
+                        doc = candidate
+                        break
+
+            if doc is None:
+                continue
+
+            doc_id = str(doc.get("_id"))
+            if doc_id in seen_ids:
+                continue
+
+            seen_ids.add(doc_id)
+            cards.append(self._to_card(doc))
+            if len(cards) >= limit:
+                break
+
+        return cards
+
+    def _normalize_species_text(self, value: str) -> str:
+        text = (value or "").replace("_", " ").strip().lower()
+        text = re.sub(r"[^a-z0-9\s]", " ", text)
+        text = re.sub(r"\s+", " ", text)
+        return text.strip()
 
     def _find_by_id(self, species_id: str) -> dict[str, Any]:
         query: dict[str, Any]

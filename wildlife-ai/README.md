@@ -23,6 +23,35 @@ cp .env.example .env
 uvicorn app.main:app --reload --port 8001
 ```
 
+## Image Recognition Integration
+
+The chatbot image flow can run your BioCLIP checkpoint and propose species candidates.
+
+1. Ensure model artifacts exist:
+
+- `../Training/bioclip_model/best_model.pth`
+- `../Training/bioclip_model/class_mapping.json`
+
+2. Configure env values in `.env` if paths differ:
+
+- `VISION_BACKBONE`
+- `VISION_MODEL_WEIGHTS_PATH`
+- `VISION_CLASS_MAPPING_PATH`
+- `VISION_TOP_K`
+- `VISION_MIN_CONFIDENCE`
+
+3. Call image query endpoint:
+
+```bash
+curl -X POST http://localhost:8001/api/chatbot/query \
+	-H "Content-Type: application/json" \
+	-d '{
+		"sessionId": "demo-session",
+		"imageUrl": "https://.../sample.jpg",
+		"question": "Loài này có nguy cấp không?"
+	}'
+```
+
 ## Endpoints
 
 - `GET /health`

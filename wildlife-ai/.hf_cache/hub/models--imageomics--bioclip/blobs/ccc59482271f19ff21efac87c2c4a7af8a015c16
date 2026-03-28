@@ -1,0 +1,18 @@
+# Examples
+
+## Zero-Shot Classification
+
+```sh
+pip install torch  # whatever version you want
+pip install open_clip_torch numpy tqdm torchvision
+```
+
+Suppose you want to evaluate BioCLIP on zero-shot classification on two tasks, `<DATASET-NAME>` and `<DATASET2-NAME>`.
+You can use `examples/zero_shot.py` to get top1 and top5 accuracy assuming your tasks are arranged as `torchvision`'s [`ImageFolder`](https://pytorch.org/vision/stable/generated/torchvision.datasets.ImageFolder.html) wants.
+
+```sh
+python examples/zero_shot.py \
+  --datasets <DATASET-NAME>=<DATASET-FOLDER> <DATASET2-NAME>=<DATASET2-FOLDER>
+```
+
+This will write to `logs/bioclip-zero-shot/results.json` with your results.
