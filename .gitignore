@@ -18,3 +18,5 @@ wildlife-backend/target/
 wildlife-ai/model/
 
 .DS_Store
+.vscode/settings.json
+*.md
