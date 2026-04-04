@@ -17,7 +17,8 @@ export const SPECIES_LIBRARY = [
     conservation: "LC",
     region: "Nam Bộ",
     habitat: "Rừng nhiệt đới",
-    summary: "Có mào đầu nổi bật, hoạt động mạnh vào ban ngày trong tán rừng thấp.",
+    summary:
+      "Có mào đầu nổi bật, hoạt động mạnh vào ban ngày trong tán rừng thấp.",
     heroImage:
       "https://duywildlifeimages.blob.core.windows.net/wildlife-media/species/taxon_acanthosaura_coronata/319820659.jpg",
   },
@@ -39,7 +40,8 @@ export const SPECIES_LIBRARY = [
     conservation: "LC",
     region: "Toàn quốc",
     habitat: "Vườn cây",
-    summary: "Loài chim quen thuộc ở khu dân cư, nhận diện bởi mào cao và má đỏ.",
+    summary:
+      "Loài chim quen thuộc ở khu dân cư, nhận diện bởi mào cao và má đỏ.",
     heroImage:
       "https://duywildlifeimages.blob.core.windows.net/wildlife-media/species/taxon_pycnonotus_jocosus/291201941.jpg",
   },
@@ -50,7 +52,8 @@ export const SPECIES_LIBRARY = [
     conservation: "LC",
     region: "Toàn quốc",
     habitat: "Đất trống và cây bụi",
-    summary: "Nhông phổ biến, thích nghi tốt ở vùng đất mở và khu dân cư ngoại ô.",
+    summary:
+      "Nhông phổ biến, thích nghi tốt ở vùng đất mở và khu dân cư ngoại ô.",
     heroImage:
       "https://duywildlifeimages.blob.core.windows.net/wildlife-media/species/taxon_calotes_versicolor/60575823.jpg",
   },
@@ -61,7 +64,8 @@ export const SPECIES_LIBRARY = [
     conservation: "DD",
     region: "Nam Bộ",
     habitat: "Rừng thứ sinh",
-    summary: "Loài có dữ liệu còn hạn chế, thường ghi nhận ở sinh cảnh rừng thứ sinh.",
+    summary:
+      "Loài có dữ liệu còn hạn chế, thường ghi nhận ở sinh cảnh rừng thứ sinh.",
     heroImage:
       "https://duywildlifeimages.blob.core.windows.net/wildlife-media/species/taxon_calotes_bachae/451417153.jpg",
   },
@@ -72,7 +76,8 @@ export const SPECIES_LIBRARY = [
     conservation: "EN",
     region: "Tây Nguyên",
     habitat: "Rừng già",
-    summary: "Biểu tượng của hệ sinh thái rừng lớn, đang chịu áp lực cao từ suy giảm sinh cảnh.",
+    summary:
+      "Biểu tượng của hệ sinh thái rừng lớn, đang chịu áp lực cao từ suy giảm sinh cảnh.",
     heroImage:
       "https://images.unsplash.com/photo-1549366021-9f761d040a94?auto=format&fit=crop&w=900&q=80",
   },
@@ -83,7 +88,8 @@ export const SPECIES_LIBRARY = [
     conservation: "EN",
     region: "Đông Nam Bộ",
     habitat: "Rừng khộp",
-    summary: "Loài chim quý hiếm có bộ lông sặc sỡ, cần ưu tiên bảo tồn ở rừng khộp.",
+    summary:
+      "Loài chim quý hiếm có bộ lông sặc sỡ, cần ưu tiên bảo tồn ở rừng khộp.",
     heroImage:
       "https://images.unsplash.com/photo-1452570053594-1b985d6ea890?auto=format&fit=crop&w=900&q=80",
   },

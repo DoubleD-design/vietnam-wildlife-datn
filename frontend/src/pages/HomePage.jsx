@@ -273,11 +273,10 @@ function HomePage() {
         </div>
         <nav className="anchor-nav" aria-label="Điều hướng chính">
           <a href="#library">Thư viện</a>
-          <a href="#about">Dự án</a>
           <button
             className="chatbot-cta"
             onClick={() => {
-              window.location.href = "/chatbot";
+              navigate("/qa");
             }}
           >
             Mở Chatbot AI
@@ -296,7 +295,7 @@ function HomePage() {
             <a href="#library" className="primary-btn">
               Khám phá thư viện
             </a>
-            <a href="/chatbot" className="secondary-btn">
+            <a href="/qa" className="secondary-btn">
               Trò chuyện với AI
             </a>
           </div>

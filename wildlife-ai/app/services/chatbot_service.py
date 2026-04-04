@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from app.models.schemas import (
     ChatQueryRequest,
     ChatQueryResponse,
@@ -13,6 +15,10 @@ from app.services.species_service import SpeciesService
 
 
 UNKNOWN_IMAGE_MESSAGE = "Xin lỗi, tôi chưa nhận diện được loài này trong cơ sở dữ liệu hiện tại. Vui lòng thử ảnh khác rõ hơn."
+GREETING_MESSAGE = (
+    "Xin chào! Bạn có thể gửi ảnh để nhận diện loài hoặc đặt câu hỏi ngắn như: "
+    "'Loài này có nguy cấp không?'"
+)
 
 
 class ChatbotService:
@@ -159,6 +165,16 @@ class ChatbotService:
     def _handle_text_flow(
         self, question: str, state: ChatSessionState
     ) -> ChatQueryResponse:
+        if self._is_greeting(question):
+            return ChatQueryResponse(
+                status="ANSWERED",
+                message="Đã xử lý câu hỏi.",
+                answer=GREETING_MESSAGE,
+                activeSpeciesId=state.current_species_id,
+                activeSpeciesName=state.current_species_name,
+                candidates=[],
+            )
+
         mentioned = self.species_service.find_species_mentioned(question)
         active_species = None
 
@@ -196,3 +212,16 @@ class ChatbotService:
         if species:
             scientific_name = str(species.get("scientific_name") or "")
         return self.rag_service.answer(question, scientific_name)
+
+    def _is_greeting(self, question: str) -> bool:
+        normalized = (question or "").strip().lower()
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized in {
+            "chào",
+            "chao",
+            "xin chào",
+            "xin chao",
+            "hello",
+            "hi",
+            "hey",
+        }

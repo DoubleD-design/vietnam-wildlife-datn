@@ -141,7 +141,10 @@ function SpeciesDetailPage() {
       return;
     }
 
-    const warmupUrls = galleryImages.slice(0, 4).map((item) => item.url).filter(Boolean);
+    const warmupUrls = galleryImages
+      .slice(0, 4)
+      .map((item) => item.url)
+      .filter(Boolean);
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       window.requestIdleCallback(() => {
         warmupUrls.forEach((url) => prefetchImage(url));
@@ -356,7 +359,7 @@ function SpeciesDetailPage() {
               </li>
             </ul>
 
-            <a href="/chatbot" className="detail-chatbot-btn">
+            <a href="/qa" className="detail-chatbot-btn">
               Hỏi Chatbot về loài này
             </a>
           </div>

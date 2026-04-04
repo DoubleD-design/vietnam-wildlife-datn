@@ -1,13 +1,13 @@
 :root {
-  --bg-main: #f6f8f3;
-  --tone-900: #6e1a37;
-  --tone-700: #ae2448;
-  --tone-500: #72baa9;
-  --tone-300: #d5e7b5;
-  --text-primary: #1f2937;
-  --text-soft: #556070;
-  --heading-font: "Fraunces", "Times New Roman", serif;
-  --body-font: "Manrope", "Segoe UI", sans-serif;
+  --bg-main: #faf7f0;
+  --tone-900: #5a1020;
+  --tone-700: #9f2341;
+  --tone-500: #d25572;
+  --tone-300: #f3d6dd;
+  --text-primary: #16232b;
+  --text-soft: #526473;
+  --heading-font: "Space Grotesk", "Segoe UI", sans-serif;
+  --body-font: "Plus Jakarta Sans", "Segoe UI", sans-serif;
 }
 
 * {

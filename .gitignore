@@ -2,6 +2,7 @@ RAG/
 Training/
 Preprocessed/
 .venv/
+.hf_cache/
 **/.env
 **/.env.*
 *.pth
@@ -16,6 +17,8 @@ wildlife-backend/target/
 
 #AI Server
 wildlife-ai/model/
+
+
 
 .DS_Store
 .vscode/settings.json

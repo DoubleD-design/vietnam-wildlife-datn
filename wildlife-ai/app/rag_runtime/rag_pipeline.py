@@ -341,7 +341,7 @@ Yêu cầu bắt buộc:
 3) Tránh lan man; mọi đoạn đều phải liên quan trực tiếp đến câu hỏi.
 4) Nếu dữ liệu thiếu hoặc chưa chắc chắn, phải ghi rõ giới hạn dữ liệu.
 5) Khi phù hợp, nêu tên khoa học, mức bảo tồn, phân bố, mối đe dọa và nguồn gốc thông tin.
-6) Uu tien su dung du lieu cau truc (fact) truoc, sau do moi bo sung dien giai tu van ban narrative.
+6) Ưu tiên sử dụng dữ liệu cấu trúc (fact) trước, sau đó mới bổ sung diễn giải từ văn bản narrative.
 """
 
 
@@ -362,15 +362,15 @@ def build_prompt(question: str, chunks: list[dict], species_context: str = "") -
     if ANSWER_STYLE == "detailed":
         answer_instruction = """
 Định dạng trả lời mong muốn (chi tiết):
-- Tong quan nhanh: 2-3 cau tra loi truc dien cau hoi.
-- Thong tin chi tiet theo dung trong tam cau hoi.
-- Bao ton va tinh trang: IUCN, Sach do Viet Nam, CITES (neu co du lieu).
-- Phan bo va sinh canh: quoc gia, vung tai Viet Nam, sinh canh.
-- De doa chinh va ham y bao ton.
-- Bang chung du lieu: liet ke 4-8 gach dau dong tu FACT/nguon truy xuat.
-- Ket luan ngan: tom y chinh va neu do chac chan du lieu.
+- **Tổng quan nhanh**: 2-3 câu trả lời trực diện câu hỏi.
+- **Thông tin chi tiết theo đúng trọng tâm câu hỏi**.
+- **Bảo tồn và tình trạng**: IUCN, Sách đỏ Việt Nam, CITES (nếu có dữ liệu).
+- **Phân bố và sinh cảnh**: quốc gia, vùng tại Việt Nam, sinh cảnh.
+- **Đe dọa chính và hàm ý bảo tồn**.
+- **Bằng chứng dữ liệu**: liệt kê 4-8 gạch đầu dòng từ FACT/nguồn truy xuất.
+- **Kết luận ngắn**: tóm ý chính và nêu độ chắc chắn dữ liệu.
 
-Do dai muc tieu: 260-450 tu neu du lieu du; neu thieu du lieu thi van giu cau truc tren va ghi ro gioi han.
+Độ dài mục tiêu: 260-450 từ nếu dữ liệu đủ; nếu thiếu dữ liệu thì vẫn giữ cấu trúc trên và ghi rõ giới hạn.
 """.strip()
     else:
         answer_instruction = """

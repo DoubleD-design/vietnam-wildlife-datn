@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import base64
 from pathlib import Path
 
 import requests
@@ -160,6 +161,15 @@ class ImageRecognitionService:
         )
 
     def _load_image(self, image_url: str):
+        if image_url.startswith("data:image"):
+            try:
+                _, payload = image_url.split(",", 1)
+                raw = base64.b64decode(payload)
+                return self._pil_image.open(io.BytesIO(raw)).convert("RGB")
+            except Exception:
+                logger.warning("Invalid data URL image payload for recognition")
+                return None
+
         if image_url.startswith(("http://", "https://")):
             timeout = max(1, settings.vision_download_timeout_seconds)
             response = requests.get(image_url, timeout=timeout)

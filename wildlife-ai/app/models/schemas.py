@@ -45,7 +45,7 @@ class ChatQueryRequest(BaseModel):
     sessionId: str
     question: str | None = None
     imageUrl: str | None = None
-    imageRejected: bool = False
+    imageRejected: bool | None = False
 
 
 class ConfirmSpeciesRequest(BaseModel):
