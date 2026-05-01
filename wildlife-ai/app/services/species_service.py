@@ -78,6 +78,31 @@ class SpeciesService:
         if not question.strip():
             return None
 
+        # Try to extract species names from the question
+        # Look for scientific names (e.g., "Genus species") or Vietnamese names
+        question_lower = question.lower()
+
+        # First, try longer phrases (2-3 consecutive words)
+        # by checking if any scientific_name is contained in the question
+        docs = list(
+            self.collection.find(
+                {}, {"_id": 1, "scientific_name": 1, "common_name_vi": 1}
+            )
+        )
+
+        for doc in docs:
+            sci_name = str(doc.get("scientific_name") or "").lower()
+            vi_name = str(doc.get("common_name_vi") or "").lower()
+
+            # Check if scientific name appears as a substring in the question
+            if sci_name and sci_name in question_lower:
+                return self.collection.find_one({"_id": doc["_id"]})
+
+            # Check if Vietnamese name appears as substring
+            if vi_name and len(vi_name) > 2 and vi_name in question_lower:
+                return self.collection.find_one({"_id": doc["_id"]})
+
+        # Fallback: try regex match on individual species names
         query = {
             "$or": [
                 {"scientific_name": {"$regex": question, "$options": "i"}},

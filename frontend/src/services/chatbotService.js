@@ -26,3 +26,10 @@ export async function confirmSpecies({ sessionId, speciesId }) {
   });
   return response.data;
 }
+
+export async function clearSpecies({ sessionId }) {
+  const response = await api.post("/chatbot/clear-species", {
+    sessionId,
+  });
+  return response.data;
+}

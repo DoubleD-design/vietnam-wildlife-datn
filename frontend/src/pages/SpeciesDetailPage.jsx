@@ -338,7 +338,6 @@ function SpeciesDetailPage() {
             {commonNameEn ? (
               <p className="detail-summary">Tên tiếng Anh: {commonNameEn}</p>
             ) : null}
-            <p className="detail-summary">{description || "Chưa có mô tả."}</p>
 
             <ul className="detail-facts-list">
               <li>

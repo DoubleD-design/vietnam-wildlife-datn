@@ -10,7 +10,6 @@ import requests
 
 from app.core.config import settings
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -118,17 +117,30 @@ class ImageRecognitionService:
 
         if backbone is None:
             try:
-                backbone, _, _ = open_clip.create_model_and_transforms(
-                    settings.vision_local_arch,
-                    pretrained=None,
-                )
-            except TypeError:
-                # Backward compatible path for open_clip signatures.
-                local_model = open_clip.create_model(
-                    settings.vision_local_arch,
-                    pretrained=None,
-                )
-                backbone = local_model
+                # Suppress "No pretrained weights loaded" warning from open_clip
+                import warnings
+
+                with warnings.catch_warnings():
+                    warnings.filterwarnings("ignore", message=".*pretrained weights.*")
+                    try:
+                        backbone, _, _ = open_clip.create_model_and_transforms(
+                            settings.vision_local_arch,
+                            pretrained=None,
+                        )
+                    except TypeError:
+                        # Backward compatible path for open_clip signatures.
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings(
+                                "ignore", message=".*pretrained weights.*"
+                            )
+                            local_model = open_clip.create_model(
+                                settings.vision_local_arch,
+                                pretrained=None,
+                            )
+                        backbone = local_model
+            except Exception as ex:
+                logger.error("Failed to create local vision backbone: %s", ex)
+                raise
             logger.info(
                 "Loaded local vision architecture: %s", settings.vision_local_arch
             )

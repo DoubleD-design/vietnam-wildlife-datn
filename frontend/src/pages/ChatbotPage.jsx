@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import SpeciesCandidateModal from "../components/SpeciesCandidateModal";
-import { confirmSpecies, queryChatbot } from "../services/chatbotService";
+import {
+  clearSpecies,
+  confirmSpecies,
+  queryChatbot,
+} from "../services/chatbotService";
 import "../App.css";
 
 function readOrCreateSessionId() {
@@ -54,10 +58,11 @@ function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFilePreview, setSelectedFilePreview] = useState("");
+  const [activeSpeciesName, setActiveSpeciesName] = useState("");
   const [messages, setMessages] = useState(() => [
     {
       role: "assistant",
-      text: "Xin chào! Tôi là trợ lý nhận diện động vật. Bạn có thể tải ảnh từ máy tính và đặt câu hỏi để tôi phân tích.",
+      text: "Xin chào! Tôi là trợ lý nhận diện động vật. Bạn có thể dán ảnh bằng Ctrl+V, kéo thả ảnh vào ô chat hoặc bấm Chọn ảnh để gửi ảnh và đặt câu hỏi.",
     },
   ]);
   const [pendingCandidates, setPendingCandidates] = useState([]);
@@ -93,6 +98,14 @@ function ChatbotPage() {
       return;
     }
 
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    setSelectedImageFile(file);
+  }
+
+  function setSelectedImageFile(file) {
     if (selectedFilePreview) {
       URL.revokeObjectURL(selectedFilePreview);
     }
@@ -110,6 +123,33 @@ function ChatbotPage() {
     setSelectedFilePreview("");
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  }
+
+  function handlePaste(event) {
+    const items = Array.from(event.clipboardData?.items || []);
+    const imageItem = items.find((item) => item.type.startsWith("image/"));
+    const file = imageItem?.getAsFile();
+
+    if (!file) {
+      return;
+    }
+
+    event.preventDefault();
+    setSelectedImageFile(file);
+  }
+
+  function handleDragOver(event) {
+    event.preventDefault();
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    const files = Array.from(event.dataTransfer?.files || []);
+    const imageFile = files.find((file) => file.type.startsWith("image/"));
+
+    if (imageFile) {
+      setSelectedImageFile(imageFile);
     }
   }
 
@@ -160,6 +200,12 @@ function ChatbotPage() {
         },
       ]);
 
+      if (response?.activeSpeciesName) {
+        setActiveSpeciesName(response.activeSpeciesName);
+      } else if (response?.activeSpeciesId === null) {
+        setActiveSpeciesName("");
+      }
+
       const candidates = Array.isArray(response?.candidates)
         ? response.candidates
         : [];
@@ -205,6 +251,9 @@ function ChatbotPage() {
           text: response?.answer || response?.message || "Đã xác nhận loài.",
         },
       ]);
+      if (response?.activeSpeciesName) {
+        setActiveSpeciesName(response.activeSpeciesName);
+      }
       setIsModalOpen(false);
       setPendingCandidates([]);
     } catch (error) {
@@ -221,13 +270,35 @@ function ChatbotPage() {
     }
   }
 
+  async function handleClearSpecies() {
+    try {
+      const response = await clearSpecies({ sessionId });
+      setActiveSpeciesName("");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: response?.message || "Đã xóa ngữ cảnh loài đang chọn.",
+        },
+      ]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          text: error?.response?.data?.message || "Xóa ngữ cảnh loài thất bại.",
+        },
+      ]);
+    }
+  }
+
   return (
     <main className="chat-shell">
       <header className="chat-page-banner">
-        <h2>
+        {/* <h2>
           <span>Hệ thống trợ lý động vật hoang dã</span>
           <span>Việt Nam</span>
-        </h2>
+        </h2> */}
         <div className="chat-page-banner-line" aria-hidden="true" />
       </header>
 
@@ -240,10 +311,14 @@ function ChatbotPage() {
               <p>Hỏi đáp về các loài động vật hoang dã tại Việt Nam</p>
             </div>
           </div>
-          <Link className="chat-back-btn" to="/">
-            ← Về thư viện
-          </Link>
+          <div className="chat-header-actions">
+            <Link className="chat-back-btn" to="/">
+              ← Về thư viện
+            </Link>
+          </div>
         </header>
+
+        {/* Removed persistent session banner per user request. */}
 
         <div className="chat-messages">
           {messages.length === 0 ? (
@@ -318,7 +393,13 @@ function ChatbotPage() {
           <div ref={messagesEndRef} />
         </div>
 
-        <form onSubmit={handleSubmit} className="chat-composer">
+        <form
+          onSubmit={handleSubmit}
+          className="chat-composer"
+          onPaste={handlePaste}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
           {selectedFilePreview ? (
             <div className="chat-picked-image">
               <img src={selectedFilePreview} alt="Ảnh vừa chọn" />
@@ -330,6 +411,7 @@ function ChatbotPage() {
 
           <div className="chat-input-row">
             <input
+              onPaste={handlePaste}
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               placeholder="Nhập câu hỏi..."
@@ -363,6 +445,10 @@ function ChatbotPage() {
                   : "Gửi"}
             </button>
           </div>
+
+          <p className="chat-drop-hint">
+            Bạn cũng có thể kéo thả ảnh vào vùng nhập hoặc dán ảnh từ clipboard.
+          </p>
         </form>
       </section>
 

@@ -528,12 +528,13 @@
 .chat-shell {
   width: min(860px, calc(100% - 32px));
   margin: 0 auto;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   padding: 12px 0;
+  overflow: hidden;
 }
 
 .chat-page-banner {
@@ -564,6 +565,46 @@
   background: rgba(255, 255, 255, 0.26);
 }
 
+.chat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+  margin-left: auto; /* push actions to the far right edge of the header */
+}
+
+.chat-clear-btn {
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chat-clear-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chat-session-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 18px 0;
+  color: #6e1a37;
+  font-weight: 700;
+}
+
+.chat-session-banner small {
+  font-weight: 500;
+  color: #6d6670;
+}
+
 .chat-page-banner h2 {
   margin: 0;
   color: #6f1730;
@@ -587,6 +628,7 @@
 
 .chat-window {
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
   border: 1px solid rgba(111, 23, 48, 0.16);
@@ -630,6 +672,7 @@
 }
 
 .chat-messages {
+  min-height: 0;
   padding: 14px 16px;
   overflow-y: auto;
   background:
@@ -833,27 +876,51 @@
 }
 
 .chat-attach-btn,
-.chat-send-btn {
-  border: 0;
-  border-radius: 999px;
-  padding: 0 16px;
+.chat-back-btn {
+  text-decoration: none;
+  color: #ffffff;
   font-weight: 700;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
 .chat-attach-btn {
-  background: #dbe7ec;
-  color: #2f3e49;
+  background: rgba(255, 255, 255, 0.28);
+  color: #6f1730;
+  border: 1px solid rgba(111, 23, 48, 0.35);
+  font-weight: 700;
+}
+
+.chat-attach-btn:hover {
+  background: rgba(255, 255, 255, 0.38);
 }
 
 .chat-send-btn {
   background: linear-gradient(135deg, #6f1730, #b92f53);
   color: #fff;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
 .chat-send-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.chat-drop-hint {
+  margin: 10px 2px 0;
+  font-size: 12px;
+  color: #6d6670;
 }
 
 .candidate-modal-overlay {
@@ -1086,13 +1153,15 @@
   .chat-shell {
     width: min(100% - 10px, 100%);
     margin: 0 auto;
-    min-height: 100vh;
-    min-height: 100dvh;
+    height: 100vh;
+    height: 100dvh;
     padding: 8px 0;
+    overflow: hidden;
   }
 
   .chat-window {
     min-height: 0;
+    height: 100%;
     border-radius: 0;
   }
 
