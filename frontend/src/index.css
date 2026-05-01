@@ -30,6 +30,24 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+body.chatbot-background {
+  background-color: #f6eef1;
+  background-image:
+    url("./assets/background.svg"),
+    radial-gradient(
+      circle at 14% 18%,
+      rgba(210, 85, 114, 0.08),
+      transparent 30%
+    );
+  background-repeat: repeat, no-repeat;
+  background-size:
+    320px auto,
+    auto;
+  background-position:
+    top left,
+    center;
+}
+
 a,
 button,
 input,

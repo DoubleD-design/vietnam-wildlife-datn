@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import SpeciesCandidateModal from "../components/SpeciesCandidateModal";
@@ -54,17 +54,24 @@ async function fileToCompressedDataUrl(file) {
 }
 
 function ChatbotPage() {
+  const [searchParams] = useSearchParams();
+  const initialSpeciesId = searchParams.get("speciesId") || "";
+  const initialSpeciesName = searchParams.get("speciesName") || "";
   const [sessionId] = useState(() => readOrCreateSessionId());
   const [question, setQuestion] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFilePreview, setSelectedFilePreview] = useState("");
   const [activeSpeciesName, setActiveSpeciesName] = useState("");
-  const [messages, setMessages] = useState(() => [
-    {
-      role: "assistant",
-      text: "Xin chào! Tôi là trợ lý nhận diện động vật. Bạn có thể dán ảnh bằng Ctrl+V, kéo thả ảnh vào ô chat hoặc bấm Chọn ảnh để gửi ảnh và đặt câu hỏi.",
-    },
-  ]);
+  const [messages, setMessages] = useState(() =>
+    initialSpeciesId
+      ? []
+      : [
+          {
+            role: "assistant",
+            text: "Xin chào! Tôi là trợ lý nhận diện động vật. Bạn có thể dán ảnh bằng Ctrl+V, kéo thả ảnh vào ô chat hoặc bấm Chọn ảnh để gửi ảnh và đặt câu hỏi.",
+          },
+        ],
+  );
   const [pendingCandidates, setPendingCandidates] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -72,6 +79,7 @@ function ChatbotPage() {
   const [loadingText, setLoadingText] = useState("");
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const didInitializeSpeciesRef = useRef(false);
 
   const canSend = useMemo(() => {
     return question.trim() || selectedFile;
@@ -85,12 +93,54 @@ function ChatbotPage() {
   }, [messages, isSending]);
 
   useEffect(() => {
+    document.body.classList.add("chatbot-background");
+
+    return () => {
+      document.body.classList.remove("chatbot-background");
+    };
+  }, []);
+
+  useEffect(() => {
     return () => {
       if (selectedFilePreview) {
         URL.revokeObjectURL(selectedFilePreview);
       }
     };
   }, [selectedFilePreview]);
+
+  useEffect(() => {
+    if (!initialSpeciesId || didInitializeSpeciesRef.current) {
+      return;
+    }
+
+    didInitializeSpeciesRef.current = true;
+    const activeName = initialSpeciesName || "loài này";
+
+    setActiveSpeciesName(activeName);
+    setMessages([
+      {
+        role: "assistant",
+        text: `Loài đang được hỏi là ${activeName}.`,
+      },
+    ]);
+
+    async function initializeActiveSpecies() {
+      try {
+        const response = await confirmSpecies({
+          sessionId,
+          speciesId: initialSpeciesId,
+        });
+
+        if (response?.activeSpeciesName) {
+          setActiveSpeciesName(response.activeSpeciesName);
+        }
+      } catch {
+        // Keep the optimistic intro message visible even if the API is down.
+      }
+    }
+
+    initializeActiveSpecies();
+  }, [initialSpeciesId, initialSpeciesName, sessionId]);
 
   function handlePickFile(event) {
     const file = event.target.files?.[0];

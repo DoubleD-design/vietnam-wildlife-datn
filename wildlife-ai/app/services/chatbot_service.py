@@ -61,12 +61,7 @@ class ChatbotService:
         current_label = (
             state.current_species_name or species.get("scientific_name") or "loài này"
         )
-        previous_label = previous_name or "chưa có loài trước đó"
-        updated_message = (
-            f"Đã cập nhật loài đang trao đổi từ {previous_label} sang {current_label}."
-            if previous_name and previous_name != current_label
-            else f"Đã cập nhật loài đang trao đổi sang {current_label}."
-        )
+        updated_message = f"Loài đang được hỏi là {current_label}."
 
         if state.pending_question:
             answer = self._answer_with_context(state.pending_question, species)

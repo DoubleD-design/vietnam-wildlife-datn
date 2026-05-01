@@ -675,9 +675,7 @@
   min-height: 0;
   padding: 14px 16px;
   overflow-y: auto;
-  background:
-    radial-gradient(circle at 8% 8%, rgba(210, 85, 114, 0.14), transparent 30%),
-    #f6eef1;
+  background: #f6eef1;
 }
 
 .chat-empty {
@@ -734,18 +732,28 @@
   padding: 10px 12px;
   border-radius: 16px;
   border: 1px solid transparent;
+  box-shadow:
+    0 10px 24px rgba(17, 27, 33, 0.16),
+    0 2px 6px rgba(17, 27, 33, 0.08);
 }
 
 .chat-bubble.user {
   background: linear-gradient(135deg, #6f1730, #b92f53);
   color: #fff;
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 12px 26px rgba(111, 23, 48, 0.34),
+    0 2px 6px rgba(17, 27, 33, 0.12);
   border-bottom-right-radius: 6px;
 }
 
 .chat-bubble.assistant {
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.97);
   color: #1f2937;
-  border-color: rgba(111, 23, 48, 0.14);
+  border-color: rgba(111, 23, 48, 0.22);
+  box-shadow:
+    0 12px 28px rgba(24, 36, 43, 0.2),
+    0 2px 8px rgba(24, 36, 43, 0.1);
   border-bottom-left-radius: 6px;
 }
 

@@ -340,10 +340,10 @@ function SpeciesDetailPage() {
             ) : null}
 
             <ul className="detail-facts-list">
-              <li>
+              {/* <li>
                 <strong>ID MongoDB:</strong>{" "}
                 {readValue(profile, ["id", "_id"], speciesId)}
-              </li>
+              </li> */}
               <li>
                 <strong>Canonical ID:</strong> {canonicalId || "unknown"}
               </li>
@@ -358,9 +358,12 @@ function SpeciesDetailPage() {
               </li>
             </ul>
 
-            <a href="/qa" className="detail-chatbot-btn">
+            <Link
+              to={`/qa?speciesId=${encodeURIComponent(speciesId)}&speciesName=${encodeURIComponent(vietnameseName || scientificName || "")}`}
+              className="detail-chatbot-btn"
+            >
               Hỏi Chatbot về loài này
-            </a>
+            </Link>
           </div>
         </div>
 
