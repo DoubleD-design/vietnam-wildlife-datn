@@ -3,11 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import SpeciesCandidateModal from "../components/SpeciesCandidateModal";
-import {
-  clearSpecies,
-  confirmSpecies,
-  queryChatbot,
-} from "../services/chatbotService";
+import { confirmSpecies, queryChatbot } from "../services/chatbotService";
 import "../App.css";
 
 function readOrCreateSessionId() {
@@ -61,7 +57,6 @@ function ChatbotPage() {
   const [question, setQuestion] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFilePreview, setSelectedFilePreview] = useState("");
-  const [activeSpeciesName, setActiveSpeciesName] = useState("");
   const [messages, setMessages] = useState(() =>
     initialSpeciesId
       ? []
@@ -116,7 +111,6 @@ function ChatbotPage() {
     didInitializeSpeciesRef.current = true;
     const activeName = initialSpeciesName || "loài này";
 
-    setActiveSpeciesName(activeName);
     setMessages([
       {
         role: "assistant",
@@ -126,14 +120,10 @@ function ChatbotPage() {
 
     async function initializeActiveSpecies() {
       try {
-        const response = await confirmSpecies({
+        await confirmSpecies({
           sessionId,
           speciesId: initialSpeciesId,
         });
-
-        if (response?.activeSpeciesName) {
-          setActiveSpeciesName(response.activeSpeciesName);
-        }
       } catch {
         // Keep the optimistic intro message visible even if the API is down.
       }
@@ -250,12 +240,6 @@ function ChatbotPage() {
         },
       ]);
 
-      if (response?.activeSpeciesName) {
-        setActiveSpeciesName(response.activeSpeciesName);
-      } else if (response?.activeSpeciesId === null) {
-        setActiveSpeciesName("");
-      }
-
       const candidates = Array.isArray(response?.candidates)
         ? response.candidates
         : [];
@@ -301,9 +285,6 @@ function ChatbotPage() {
           text: response?.answer || response?.message || "Đã xác nhận loài.",
         },
       ]);
-      if (response?.activeSpeciesName) {
-        setActiveSpeciesName(response.activeSpeciesName);
-      }
       setIsModalOpen(false);
       setPendingCandidates([]);
     } catch (error) {
@@ -317,28 +298,6 @@ function ChatbotPage() {
     } finally {
       setIsSending(false);
       setLoadingText("");
-    }
-  }
-
-  async function handleClearSpecies() {
-    try {
-      const response = await clearSpecies({ sessionId });
-      setActiveSpeciesName("");
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: response?.message || "Đã xóa ngữ cảnh loài đang chọn.",
-        },
-      ]);
-    } catch (error) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: error?.response?.data?.message || "Xóa ngữ cảnh loài thất bại.",
-        },
-      ]);
     }
   }
 

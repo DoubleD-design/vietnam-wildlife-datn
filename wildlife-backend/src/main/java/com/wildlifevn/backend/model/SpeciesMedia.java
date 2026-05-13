@@ -13,6 +13,18 @@ public class SpeciesMedia {
     @Field("blob_url")
     private String blobUrl;
 
+    @Field("thumbnail_url")
+    private String thumbnailUrl;
+
+    @Field("thumbnail_width")
+    private Integer thumbnailWidth;
+
+    @Field("thumbnail_height")
+    private Integer thumbnailHeight;
+
+    @Field("thumbnail_format")
+    private String thumbnailFormat;
+
     public String getUrl() {
         return url;
     }
@@ -51,5 +63,37 @@ public class SpeciesMedia {
 
     public void setBlobUrl(String blobUrl) {
         this.blobUrl = blobUrl;
+    }
+
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
+    public Integer getThumbnailWidth() {
+        return thumbnailWidth;
+    }
+
+    public void setThumbnailWidth(Integer thumbnailWidth) {
+        this.thumbnailWidth = thumbnailWidth;
+    }
+
+    public Integer getThumbnailHeight() {
+        return thumbnailHeight;
+    }
+
+    public void setThumbnailHeight(Integer thumbnailHeight) {
+        this.thumbnailHeight = thumbnailHeight;
+    }
+
+    public String getThumbnailFormat() {
+        return thumbnailFormat;
+    }
+
+    public void setThumbnailFormat(String thumbnailFormat) {
+        this.thumbnailFormat = thumbnailFormat;
     }
 }

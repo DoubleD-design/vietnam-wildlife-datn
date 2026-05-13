@@ -39,14 +39,19 @@ public class SpeciesController {
 
     @GetMapping
     @Operation(summary = "List species", description = "List/search species for library cards")
-        public ResponseEntity<PagedResponse<SpeciesCardResponse>> listSpecies(
+    public ResponseEntity<PagedResponse<SpeciesCardResponse>> listSpecies(
             @RequestParam(defaultValue = "") String keyword,
+            @RequestParam(defaultValue = "") String sectorSlug,
+            @RequestParam(defaultValue = "") String conservationStatus,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "12") int size) {
-        Page<SpeciesCardResponse> pageData = speciesService.listSpecies(keyword, page, size);
+        Page<SpeciesCardResponse> pageData =
+                speciesService.listSpecies(keyword, sectorSlug, conservationStatus, page, size);
         logger.info(
-                "[SpeciesAPI] GET /api/species success keyword='{}' page={} size={} returnedElements={} totalElements={} totalPages={}",
+                "[SpeciesAPI] GET /api/species success keyword='{}' sectorSlug='{}' conservationStatus='{}' page={} size={} returnedElements={} totalElements={} totalPages={}",
                 keyword,
+                sectorSlug,
+                conservationStatus,
                 page,
                 size,
             pageData.getNumberOfElements(),

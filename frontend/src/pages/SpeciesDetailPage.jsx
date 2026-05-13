@@ -112,6 +112,7 @@ function SpeciesDetailPage() {
         return {
           key: `${url}-${index}`,
           url,
+          thumbUrl: readValue(asset, ["thumbnailUrl", "thumbnail_url"], url),
           asset,
         };
       })
@@ -121,6 +122,7 @@ function SpeciesDetailPage() {
       items.unshift({
         key: `${heroImage}-hero`,
         url: heroImage,
+        thumbUrl: readValue(mediaAssets[0], ["thumbnailUrl", "thumbnail_url"], heroImage),
         asset: {
           type: "image",
           blob_url: heroImage,
@@ -136,26 +138,6 @@ function SpeciesDetailPage() {
     setSelectedMediaIndex(0);
   }, [speciesId, galleryImages.length]);
 
-  useEffect(() => {
-    if (galleryImages.length === 0) {
-      return;
-    }
-
-    const warmupUrls = galleryImages
-      .slice(0, 4)
-      .map((item) => item.url)
-      .filter(Boolean);
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      window.requestIdleCallback(() => {
-        warmupUrls.forEach((url) => prefetchImage(url));
-      });
-    } else {
-      setTimeout(() => {
-        warmupUrls.forEach((url) => prefetchImage(url));
-      }, 120);
-    }
-  }, [galleryImages]);
-
   const selectedMedia =
     galleryImages[selectedMediaIndex] || galleryImages[0] || null;
 
@@ -164,16 +146,19 @@ function SpeciesDetailPage() {
       return;
     }
 
-    prefetchImage(selectedMedia.url);
-
     const next = galleryImages[selectedMediaIndex + 1];
-    const prev = galleryImages[selectedMediaIndex - 1];
-    if (next?.url) {
-      prefetchImage(next.url);
+    if (!next?.url) {
+      return;
     }
-    if (prev?.url) {
-      prefetchImage(prev.url);
+
+    const loadNext = () => prefetchImage(next.url);
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const requestId = window.requestIdleCallback(loadNext);
+      return () => window.cancelIdleCallback?.(requestId);
     }
+
+    const timeoutId = window.setTimeout(loadNext, 400);
+    return () => window.clearTimeout(timeoutId);
   }, [selectedMedia, selectedMediaIndex, galleryImages]);
 
   const scientificName = readValue(
@@ -319,7 +304,7 @@ function SpeciesDetailPage() {
                   >
                     <img
                       className="detail-thumb-image"
-                      src={image.url}
+                      src={image.thumbUrl || image.url}
                       alt=""
                       loading="lazy"
                       decoding="async"

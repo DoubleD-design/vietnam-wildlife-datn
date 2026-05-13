@@ -9,10 +9,18 @@ species_service = SpeciesService()
 @router.get("")
 def list_species(
     keyword: str = Query(default=""),
+    sectorSlug: str = Query(default=""),
+    conservationStatus: str = Query(default=""),
     page: int = Query(default=0, ge=0),
     size: int = Query(default=12, ge=1, le=100),
 ):
-    return species_service.list_species(keyword, page, size)
+    return species_service.list_species(
+        keyword=keyword,
+        page=page,
+        size=size,
+        sector_slug=sectorSlug,
+        conservation_status=conservationStatus,
+    )
 
 
 @router.get("/{species_id}/summary")

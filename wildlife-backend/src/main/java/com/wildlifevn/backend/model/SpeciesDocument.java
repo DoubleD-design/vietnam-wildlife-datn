@@ -21,8 +21,11 @@ public class SpeciesDocument {
     @Field("conservation_status")
     private String conservationStatus;
 
-    @Field("description")
+    @Field("short_description")
     private String shortDescription;
+
+    @Field("description")
+    private String description;
 
     @Field("group")
     private String group;
@@ -35,6 +38,9 @@ public class SpeciesDocument {
 
     @Field("image_url")
     private String heroImageUrl;
+
+    @Field("thumbnail_url")
+    private String thumbnailUrl;
 
     @Field("media_assets")
     private List<SpeciesMedia> media = new ArrayList<>();
@@ -72,11 +78,22 @@ public class SpeciesDocument {
     }
 
     public String getShortDescription() {
-        return shortDescription;
+        if (shortDescription != null && !shortDescription.isBlank()) {
+            return shortDescription;
+        }
+        return description;
     }
 
     public void setShortDescription(String shortDescription) {
         this.shortDescription = shortDescription;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public String getHeroImageUrl() {
@@ -85,6 +102,14 @@ public class SpeciesDocument {
 
     public void setHeroImageUrl(String heroImageUrl) {
         this.heroImageUrl = heroImageUrl;
+    }
+
+    public String getThumbnailUrl() {
+        return thumbnailUrl;
+    }
+
+    public void setThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     public String getGroup() {

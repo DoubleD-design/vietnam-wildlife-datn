@@ -12,11 +12,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.bson.Document;
 import org.bson.types.ObjectId;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -33,21 +36,110 @@ public class SpeciesService {
         this.mongoTemplate = mongoTemplate;
     }
 
-    public Page<SpeciesCardResponse> listSpecies(String keyword, int page, int size) {
-        Pageable pageable = PageRequest.of(page, size);
+    public Page<SpeciesCardResponse> listSpecies(
+            String keyword, String sectorSlug, String conservationStatus, int page, int size) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
+        Pageable pageable = PageRequest.of(safePage, safeSize);
+        Query query = buildSpeciesListQuery(keyword, sectorSlug, conservationStatus);
+        long total = mongoTemplate.count(query, SpeciesDocument.class);
 
-        Page<SpeciesDocument> speciesPage;
-        if (keyword == null || keyword.isBlank()) {
-            speciesPage = speciesRepository.findAll(pageable);
-        } else {
-            speciesPage = speciesRepository
-                    .findByVietnameseNameContainingIgnoreCaseOrScientificNameContainingIgnoreCase(
-                            keyword,
-                            keyword,
-                            pageable);
+        query.skip(pageable.getOffset());
+        query.limit(pageable.getPageSize());
+        query.with(Sort.by(Sort.Order.asc("common_name_vi"), Sort.Order.asc("scientific_name")));
+        includeCardFields(query);
+
+        List<SpeciesCardResponse> content = mongoTemplate.find(query, Document.class, "species")
+                .stream()
+                .map(this::toCard)
+                .toList();
+
+        return new PageImpl<>(content, pageable, total);
+    }
+
+    private Query buildSpeciesListQuery(String keyword, String sectorSlug, String conservationStatus) {
+        Query query = new Query();
+        List<Criteria> filters = new ArrayList<>();
+
+        if (keyword != null && !keyword.isBlank()) {
+            String pattern = ".*" + Pattern.quote(keyword.trim()) + ".*";
+            filters.add(new Criteria().orOperator(
+                    Criteria.where("common_name_vi").regex(pattern, "i"),
+                    Criteria.where("scientific_name").regex(pattern, "i")));
         }
 
-        return speciesPage.map(this::toCard);
+        Criteria sectorCriteria = buildSectorCriteria(sectorSlug);
+        if (sectorCriteria != null) {
+            filters.add(sectorCriteria);
+        }
+
+        Criteria statusCriteria = buildConservationStatusCriteria(conservationStatus);
+        if (statusCriteria != null) {
+            filters.add(statusCriteria);
+        }
+
+        if (filters.size() == 1) {
+            query.addCriteria(filters.get(0));
+        } else if (filters.size() > 1) {
+            query.addCriteria(new Criteria().andOperator(filters.toArray(Criteria[]::new)));
+        }
+
+        return query;
+    }
+
+    private Criteria buildSectorCriteria(String sectorSlug) {
+        String normalized = sectorSlug == null ? "" : sectorSlug.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "chim" -> Criteria.where("group").regex(".*(aves|bird).*", "i");
+            case "thu" -> Criteria.where("group").regex(".*(mamm|mammalia).*", "i");
+            case "luong-cu" -> Criteria.where("group").regex(".*(amphib|amphibia).*", "i");
+            case "khac" -> new Criteria().norOperator(
+                    Criteria.where("group").regex(".*(aves|bird).*", "i"),
+                    Criteria.where("group").regex(".*(mamm|mammalia).*", "i"),
+                    Criteria.where("group").regex(".*(amphib|amphibia).*", "i"));
+            default -> null;
+        };
+    }
+
+    private Criteria buildConservationStatusCriteria(String conservationStatus) {
+        String normalized = normalizeStatusFilter(conservationStatus);
+        if (normalized.isBlank()) {
+            return null;
+        }
+
+        String exact = "^" + Pattern.quote(normalized) + "$";
+        return new Criteria().orOperator(
+                Criteria.where("conservation_status").regex(exact, "i"),
+                Criteria.where("conservation.iucn.category").regex(exact, "i"),
+                Criteria.where("conservation.iucn_category").regex(exact, "i"),
+                Criteria.where("conservation.iucnCategory").regex(exact, "i"));
+    }
+
+    private String normalizeStatusFilter(String conservationStatus) {
+        String normalized = conservationStatus == null
+                ? ""
+                : conservationStatus.trim().toUpperCase(Locale.ROOT);
+        return switch (normalized) {
+            case "LC", "NT", "VU", "EN", "CR", "DD" -> normalized;
+            default -> "";
+        };
+    }
+
+    private void includeCardFields(Query query) {
+        query.fields()
+                .include("_id")
+                .include("scientific_name")
+                .include("common_name_vi")
+                .include("conservation_status")
+                .include("conservation")
+                .include("image_url")
+                .include("thumbnail_url")
+                .include("group")
+                .include("distribution")
+                .include("media_assets.url")
+                .include("media_assets.blob_url")
+                .include("media_assets.is_hero")
+                .include("media_assets.thumbnail_url");
     }
 
     public SpeciesDetailResponse getSpeciesDetail(@NonNull String speciesId) {
@@ -111,8 +203,21 @@ public class SpeciesService {
                 species.getVietnameseName(),
                 resolveConservationStatus(species),
                 resolveHeroImage(species),
+                resolveThumbnailImage(species),
                 species.getGroup(),
                 resolvePrimaryRegion(species));
+    }
+
+    private SpeciesCardResponse toCard(Document document) {
+        return new SpeciesCardResponse(
+                resolveDocumentId(document),
+                toStringValue(document.get("scientific_name")),
+                toStringValue(document.get("common_name_vi")),
+                resolveConservationStatus(document),
+                resolveHeroImage(document),
+                resolveThumbnailImage(document),
+                toStringValue(document.get("group")),
+                resolvePrimaryRegion(document));
     }
 
     private String resolveConservationStatus(SpeciesDocument species) {
@@ -128,6 +233,15 @@ public class SpeciesService {
         }
 
         return resolveConservationStatusFromMongo(species.getId());
+    }
+
+    private String resolveConservationStatus(Document document) {
+        String direct = normalizeConservationCode(toStringValue(document.get("conservation_status")));
+        if (!"DD".equals(direct)) {
+            return direct;
+        }
+
+        return extractConservationFromMap(toMap(document.get("conservation")));
     }
 
     private String normalizeConservationCode(String rawValue) {
@@ -253,6 +367,27 @@ public class SpeciesService {
         return null;
     }
 
+    private String resolvePrimaryRegion(Document document) {
+        Map<String, Object> distribution = toMap(document.get("distribution"));
+        if (distribution.isEmpty()) {
+            return null;
+        }
+
+        Object regions = distribution.get("regions_vi");
+        if (regions instanceof List<?> list) {
+            for (Object item : list) {
+                if (item != null) {
+                    String region = String.valueOf(item).trim();
+                    if (!region.isEmpty()) {
+                        return region;
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
     private SpeciesDetailResponse toDetail(SpeciesDocument species) {
         List<String> mediaUrls = species.getMedia() == null
                 ? List.of()
@@ -292,6 +427,77 @@ public class SpeciesService {
         return resolveMediaUrl(species.getMedia().getFirst());
     }
 
+    private String resolveHeroImage(Document document) {
+        String imageUrl = toStringValue(document.get("image_url"));
+        if (imageUrl != null && !imageUrl.isBlank()) {
+            return imageUrl;
+        }
+
+        List<Map<String, Object>> mediaAssets = toDocumentList(document.get("media_assets"));
+        for (Map<String, Object> media : mediaAssets) {
+            if (Boolean.TRUE.equals(media.get("is_hero"))) {
+                String heroUrl = resolveMediaUrl(media);
+                if (heroUrl != null && !heroUrl.isBlank()) {
+                    return heroUrl;
+                }
+            }
+        }
+
+        return mediaAssets.isEmpty() ? null : resolveMediaUrl(mediaAssets.getFirst());
+    }
+
+    private String resolveThumbnailImage(SpeciesDocument species) {
+        if (species.getThumbnailUrl() != null && !species.getThumbnailUrl().isBlank()) {
+            return species.getThumbnailUrl();
+        }
+
+        if (species.getMedia() == null || species.getMedia().isEmpty()) {
+            return resolveHeroImage(species);
+        }
+
+        for (SpeciesMedia media : species.getMedia()) {
+            if (Boolean.TRUE.equals(media.getHero())
+                    && media.getThumbnailUrl() != null
+                    && !media.getThumbnailUrl().isBlank()) {
+                return media.getThumbnailUrl();
+            }
+        }
+
+        for (SpeciesMedia media : species.getMedia()) {
+            if (media.getThumbnailUrl() != null && !media.getThumbnailUrl().isBlank()) {
+                return media.getThumbnailUrl();
+            }
+        }
+
+        return resolveHeroImage(species);
+    }
+
+    private String resolveThumbnailImage(Document document) {
+        String thumbnailUrl = toStringValue(document.get("thumbnail_url"));
+        if (thumbnailUrl != null && !thumbnailUrl.isBlank()) {
+            return thumbnailUrl;
+        }
+
+        List<Map<String, Object>> mediaAssets = toDocumentList(document.get("media_assets"));
+        for (Map<String, Object> media : mediaAssets) {
+            if (Boolean.TRUE.equals(media.get("is_hero"))) {
+                String heroThumbnailUrl = toStringValue(media.get("thumbnail_url"));
+                if (heroThumbnailUrl != null && !heroThumbnailUrl.isBlank()) {
+                    return heroThumbnailUrl;
+                }
+            }
+        }
+
+        for (Map<String, Object> media : mediaAssets) {
+            String mediaThumbnailUrl = toStringValue(media.get("thumbnail_url"));
+            if (mediaThumbnailUrl != null && !mediaThumbnailUrl.isBlank()) {
+                return mediaThumbnailUrl;
+            }
+        }
+
+        return resolveHeroImage(document);
+    }
+
     private String resolveMediaUrl(SpeciesMedia media) {
         if (media == null) {
             return null;
@@ -300,6 +506,19 @@ public class SpeciesService {
             return media.getBlobUrl();
         }
         return media.getUrl();
+    }
+
+    private String resolveMediaUrl(Map<String, Object> media) {
+        if (media == null || media.isEmpty()) {
+            return null;
+        }
+
+        String blobUrl = toStringValue(media.get("blob_url"));
+        if (blobUrl != null && !blobUrl.isBlank()) {
+            return blobUrl;
+        }
+
+        return toStringValue(media.get("url"));
     }
 
     private String nullableLower(String value) {
@@ -330,6 +549,14 @@ public class SpeciesService {
 
     private String toStringValue(Object value) {
         return value == null ? null : String.valueOf(value);
+    }
+
+    private String resolveDocumentId(Document document) {
+        Object id = document.get("_id");
+        if (id instanceof ObjectId objectId) {
+            return objectId.toHexString();
+        }
+        return toStringValue(id);
     }
 
     @SuppressWarnings("unchecked")

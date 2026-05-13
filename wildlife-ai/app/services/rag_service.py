@@ -42,6 +42,7 @@ class RagService:
             "$or": [
                 {"scientific_name": {"$regex": query, "$options": "i"}},
                 {"common_name_vi": {"$regex": query, "$options": "i"}},
+                {"short_description": {"$regex": query, "$options": "i"}},
                 {"description": {"$regex": query, "$options": "i"}},
                 {"search_keywords": {"$elemMatch": {"$regex": query, "$options": "i"}}},
             ]
@@ -70,7 +71,7 @@ class RagService:
         taxonomy = doc.get("taxonomy") or {}
         conservation = doc.get("conservation") or {}
         iucn = (conservation.get("iucn") or {}).get("category", "unknown")
-        description = (doc.get("description") or "").strip()
+        description = (doc.get("description") or doc.get("short_description") or "").strip()
 
         if not description:
             return ""

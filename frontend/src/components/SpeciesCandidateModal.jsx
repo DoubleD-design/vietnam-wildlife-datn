@@ -151,7 +151,7 @@ export default function SpeciesCandidateModal({
                   onClick={() => onSelect?.(candidate)}
                 >
                   <img
-                    src={candidate.heroImageUrl}
+                    src={candidate.thumbnailUrl || candidate.heroImageUrl}
                     alt={candidate.vietnameseName || candidate.scientificName}
                   />
                   <div className="candidate-card-info">

@@ -6,6 +6,7 @@ public record SpeciesCardResponse(
                 String vietnameseName,
                 String conservationStatus,
                 String heroImageUrl,
+                String thumbnailUrl,
                 String group,
                 String region) {
 }

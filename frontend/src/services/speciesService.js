@@ -23,13 +23,27 @@ export async function fetchSpeciesList({
   keyword = "",
   page = 0,
   size = 48,
+  sectorSlug = "",
+  conservationStatus = "",
+  signal,
 } = {}) {
+  const params = {
+    keyword,
+    page,
+    size,
+  };
+
+  if (sectorSlug) {
+    params.sectorSlug = sectorSlug;
+  }
+
+  if (conservationStatus && conservationStatus !== "all") {
+    params.conservationStatus = conservationStatus;
+  }
+
   const response = await api.get("/species", {
-    params: {
-      keyword,
-      page,
-      size,
-    },
+    params,
+    signal,
   });
   return response.data;
 }

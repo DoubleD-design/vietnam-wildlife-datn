@@ -147,6 +147,7 @@ class ChatbotService:
                 scientificName=card.scientificName,
                 vietnameseName=card.vietnameseName,
                 heroImageUrl=card.heroImageUrl,
+                thumbnailUrl=card.thumbnailUrl,
             )
             for card in cards
         ]

@@ -9,6 +9,9 @@ class SpeciesCardResponse(BaseModel):
     vietnameseName: str | None = None
     conservationStatus: str | None = None
     heroImageUrl: str | None = None
+    thumbnailUrl: str | None = None
+    group: str | None = None
+    region: str | None = None
 
 
 class SpeciesSummaryResponse(BaseModel):
@@ -33,6 +36,7 @@ class SpeciesScientificProfileResponse(BaseModel):
     taxonomy: dict[str, Any] = Field(default_factory=dict)
     imageUrl: str | None = None
     mediaAssets: list[dict[str, Any]] = Field(default_factory=list)
+    shortDescription: str | None = None
     description: str | None = None
     distribution: dict[str, Any] = Field(default_factory=dict)
     behavior: str | None = None
@@ -62,6 +66,7 @@ class SpeciesCandidateResponse(BaseModel):
     scientificName: str | None = None
     vietnameseName: str | None = None
     heroImageUrl: str | None = None
+    thumbnailUrl: str | None = None
 
 
 class ChatQueryResponse(BaseModel):
