@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     rag_top_k: int = 4
     rag_max_api_retries: int = 3
     rag_max_retry_wait_seconds: int = 3
+    rag_generation_timeout_seconds: int = 20
     vision_use_remote_backbone: bool = False
     vision_backbone: str = "hf-hub:imageomics/bioclip"
     vision_local_arch: str = "ViT-B-16"

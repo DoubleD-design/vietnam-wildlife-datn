@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from app.models.schemas import (
     ChatQueryRequest,
@@ -20,6 +20,14 @@ def query(req: ChatQueryRequest):
         raise HTTPException(status_code=400, detail=str(ex)) from ex
 
 
+@router.post("/query-debug")
+def query_debug(req: ChatQueryRequest):
+    try:
+        return chatbot_service.query_debug(req)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
 @router.post("/confirm-species")
 def confirm_species(req: ConfirmSpeciesRequest):
     try:
@@ -31,3 +39,8 @@ def confirm_species(req: ConfirmSpeciesRequest):
 @router.post("/clear-species")
 def clear_species(req: ClearSessionRequest):
     return chatbot_service.clear_species(req.sessionId)
+
+
+@router.get("/rag-health")
+def rag_health(load: bool = Query(default=False)):
+    return chatbot_service.rag_health(load=load)

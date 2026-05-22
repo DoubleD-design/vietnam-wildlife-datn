@@ -10,3 +10,4 @@ class ChatSessionState:
     pending_question: str | None = None
     awaiting_confirmation: bool = False
     pending_candidates: list[SpeciesCandidateResponse] = field(default_factory=list)
+    recent_multi_species_entities: list[dict] = field(default_factory=list)

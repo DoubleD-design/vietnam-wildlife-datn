@@ -544,6 +544,8 @@ public class SpeciesService {
                 toStringValue(document.get("behavior")),
                 toMap(document.get("ecology")),
                 toMap(document.get("conservation")),
+                toMap(document.get("legal")),
+                toMap(document.get("safety")),
                 toStringList(document.get("search_keywords")));
     }
 

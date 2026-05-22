@@ -4,7 +4,10 @@ import com.wildlifevn.backend.dto.request.ChatQueryRequest;
 import com.wildlifevn.backend.dto.request.ClearSessionRequest;
 import com.wildlifevn.backend.dto.request.ConfirmSpeciesRequest;
 import com.wildlifevn.backend.dto.response.ChatQueryResponse;
+import java.util.Map;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClientException;
@@ -26,12 +29,46 @@ public class AiServerClient {
         return post("/api/chatbot/query", request);
     }
 
+    public Map<String, Object> queryDebug(ChatQueryRequest request) {
+        try {
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    aiBaseUrl + "/api/chatbot/query-debug",
+                    HttpMethod.POST,
+                    new org.springframework.http.HttpEntity<>(request),
+                    new ParameterizedTypeReference<>() {});
+            Map<String, Object> payload = response.getBody();
+            if (payload == null) {
+                throw new IllegalStateException("AI server returned empty response");
+            }
+            return payload;
+        } catch (RestClientException ex) {
+            throw new IllegalStateException("Cannot call AI server: " + ex.getMessage(), ex);
+        }
+    }
+
     public ChatQueryResponse confirmSpecies(ConfirmSpeciesRequest request) {
         return post("/api/chatbot/confirm-species", request);
     }
 
     public ChatQueryResponse clearSpecies(ClearSessionRequest request) {
         return post("/api/chatbot/clear-species", request);
+    }
+
+    public Map<String, Object> ragHealth(boolean load) {
+        try {
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    aiBaseUrl + "/api/chatbot/rag-health?load=" + load,
+                    HttpMethod.GET,
+                    null,
+                    new ParameterizedTypeReference<>() {});
+            Map<String, Object> payload = response.getBody();
+            if (payload == null) {
+                throw new IllegalStateException("AI server returned empty response");
+            }
+            return payload;
+        } catch (RestClientException ex) {
+            throw new IllegalStateException("Cannot call AI server: " + ex.getMessage(), ex);
+        }
     }
 
     private <T> ChatQueryResponse post(String path, T body) {

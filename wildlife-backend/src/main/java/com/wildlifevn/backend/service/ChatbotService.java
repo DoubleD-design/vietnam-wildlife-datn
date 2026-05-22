@@ -6,6 +6,7 @@ import com.wildlifevn.backend.dto.request.ClearSessionRequest;
 import com.wildlifevn.backend.dto.request.ConfirmSpeciesRequest;
 import com.wildlifevn.backend.dto.response.ChatQueryResponse;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,6 +24,17 @@ public class ChatbotService {
             return aiServerClient.query(request);
         } catch (IllegalStateException ex) {
             return fallback("AI_SERVER_ERROR", AI_SERVER_UNAVAILABLE);
+        }
+    }
+
+    public Map<String, Object> queryDebug(ChatQueryRequest request) {
+        try {
+            return aiServerClient.queryDebug(request);
+        } catch (IllegalStateException ex) {
+            return Map.of(
+                    "status", "AI_SERVER_ERROR",
+                    "message", AI_SERVER_UNAVAILABLE,
+                    "debug", Map.of("errors", List.of(ex.getMessage())));
         }
     }
 
@@ -46,6 +58,17 @@ public class ChatbotService {
             return aiServerClient.clearSpecies(request);
         } catch (IllegalStateException ex) {
             return fallback("AI_SERVER_ERROR", AI_SERVER_UNAVAILABLE);
+        }
+    }
+
+    public Map<String, Object> ragHealth(boolean load) {
+        try {
+            return aiServerClient.ragHealth(load);
+        } catch (IllegalStateException ex) {
+            return Map.of(
+                    "status", "unavailable",
+                    "loaded", false,
+                    "error", AI_SERVER_UNAVAILABLE);
         }
     }
 

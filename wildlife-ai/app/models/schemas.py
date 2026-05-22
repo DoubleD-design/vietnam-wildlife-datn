@@ -42,6 +42,8 @@ class SpeciesScientificProfileResponse(BaseModel):
     behavior: str | None = None
     ecology: dict[str, Any] = Field(default_factory=dict)
     conservation: dict[str, Any] = Field(default_factory=dict)
+    legal: dict[str, Any] = Field(default_factory=dict)
+    safety: dict[str, Any] = Field(default_factory=dict)
     searchKeywords: list[str] = Field(default_factory=list)
 
 

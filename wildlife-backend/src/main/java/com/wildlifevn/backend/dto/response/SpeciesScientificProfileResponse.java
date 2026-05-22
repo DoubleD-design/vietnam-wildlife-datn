@@ -20,5 +20,7 @@ public record SpeciesScientificProfileResponse(
         String behavior,
         Map<String, Object> ecology,
         Map<String, Object> conservation,
+        Map<String, Object> legal,
+        Map<String, Object> safety,
         List<String> searchKeywords) {
 }

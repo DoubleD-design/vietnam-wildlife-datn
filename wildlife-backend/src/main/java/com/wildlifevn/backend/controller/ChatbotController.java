@@ -8,12 +8,15 @@ import com.wildlifevn.backend.service.ChatbotService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -40,6 +43,17 @@ public class ChatbotController {
         return ResponseEntity.ok(result);
     }
 
+    @PostMapping("/query-debug")
+    @Operation(summary = "Send question with RAG debug trace", description = "Handle chatbot query and return sanitized RAG trace metadata for evaluation")
+    public ResponseEntity<Map<String, Object>> queryDebug(@Valid @RequestBody ChatQueryRequest request) {
+        Map<String, Object> result = chatbotService.queryDebug(request);
+        logger.info(
+                "[ChatbotAPI] POST /api/chatbot/query-debug success sessionId={} status={}",
+                request.getSessionId(),
+                result.get("status"));
+        return ResponseEntity.ok(result);
+    }
+
     @PostMapping("/confirm-species")
     @Operation(summary = "Confirm species", description = "Confirm species from candidate cards and optionally auto-answer pending question")
     public ResponseEntity<ChatQueryResponse> confirmSpecies(@Valid @RequestBody ConfirmSpeciesRequest request) {
@@ -60,6 +74,15 @@ public class ChatbotController {
                 "[ChatbotAPI] POST /api/chatbot/clear-species success sessionId={} status={}",
                 request.getSessionId(),
                 result.status());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/rag-health")
+    @Operation(summary = "RAG health", description = "Check AI server RAG runtime health without exposing secrets")
+    public ResponseEntity<Map<String, Object>> ragHealth(
+            @RequestParam(defaultValue = "false") boolean load) {
+        Map<String, Object> result = chatbotService.ragHealth(load);
+        logger.info("[ChatbotAPI] GET /api/chatbot/rag-health success load={} status={}", load, result.get("status"));
         return ResponseEntity.ok(result);
     }
 }
