@@ -139,7 +139,8 @@ public class SpeciesService {
                 .include("media_assets.url")
                 .include("media_assets.blob_url")
                 .include("media_assets.is_hero")
-                .include("media_assets.thumbnail_url");
+                .include("media_assets.thumbnail_url")
+                .include("media_assets.medium_url");
     }
 
     public SpeciesDetailResponse getSpeciesDetail(@NonNull String speciesId) {
@@ -502,6 +503,9 @@ public class SpeciesService {
         if (media == null) {
             return null;
         }
+        if (media.getMediumUrl() != null && !media.getMediumUrl().isBlank()) {
+            return media.getMediumUrl();
+        }
         if (media.getBlobUrl() != null && !media.getBlobUrl().isBlank()) {
             return media.getBlobUrl();
         }
@@ -511,6 +515,11 @@ public class SpeciesService {
     private String resolveMediaUrl(Map<String, Object> media) {
         if (media == null || media.isEmpty()) {
             return null;
+        }
+
+        String mediumUrl = toStringValue(media.get("medium_url"));
+        if (mediumUrl != null && !mediumUrl.isBlank()) {
+            return mediumUrl;
         }
 
         String blobUrl = toStringValue(media.get("blob_url"));

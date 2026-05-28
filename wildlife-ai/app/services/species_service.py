@@ -48,6 +48,7 @@ class SpeciesService:
             "media_assets.blob_url": 1,
             "media_assets.is_hero": 1,
             "media_assets.thumbnail_url": 1,
+            "media_assets.medium_url": 1,
             "group": 1,
             "distribution": 1,
         }
@@ -988,7 +989,7 @@ class SpeciesService:
     def _to_summary(self, doc: dict[str, Any]) -> SpeciesSummaryResponse:
         media_urls: list[str] = []
         for asset in doc.get("media_assets") or []:
-            url = asset.get("blob_url") or asset.get("url")
+            url = asset.get("medium_url") or asset.get("blob_url") or asset.get("url")
             if url:
                 media_urls.append(url)
 
@@ -1023,10 +1024,10 @@ class SpeciesService:
         assets = doc.get("media_assets") or []
         for asset in assets:
             if asset.get("is_hero"):
-                return asset.get("blob_url") or asset.get("url")
+                return asset.get("medium_url") or asset.get("blob_url") or asset.get("url")
 
         if assets:
-            return assets[0].get("blob_url") or assets[0].get("url")
+            return assets[0].get("medium_url") or assets[0].get("blob_url") or assets[0].get("url")
         return None
 
     def _resolve_thumbnail_image(self, doc: dict[str, Any]) -> str | None:

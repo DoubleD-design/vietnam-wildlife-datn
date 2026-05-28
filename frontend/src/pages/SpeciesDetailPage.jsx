@@ -6,6 +6,8 @@ import {
 } from "../services/speciesService";
 import "../App.css";
 
+const THUMBNAIL_WIDTH = 480;
+
 function readValue(source, keys, fallback = null) {
   for (const key of keys) {
     if (source?.[key] !== undefined && source[key] !== null) {
@@ -23,6 +25,19 @@ function toObject(value) {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value
     : {};
+}
+
+function readNumber(source, keys, fallback = undefined) {
+  const value = readValue(source, keys, fallback);
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+}
+
+function buildSrcSet(entries) {
+  return entries
+    .filter((entry) => entry?.url && entry?.width)
+    .map((entry) => `${entry.url} ${entry.width}w`)
+    .join(", ");
 }
 
 function formatList(value, emptyText = "Chưa có dữ liệu") {
@@ -109,20 +124,42 @@ function SpeciesDetailPage() {
         if (!url) {
           return null;
         }
+        const thumbUrl = readValue(asset, ["thumbnailUrl", "thumbnail_url"], "");
+        const mediumUrl = readValue(asset, ["mediumUrl", "medium_url"], "");
+        const thumbWidth = readNumber(asset, ["thumbnailWidth", "thumbnail_width"], THUMBNAIL_WIDTH);
+        const mediumWidth = readNumber(asset, ["mediumWidth", "medium_width"], 1280);
         return {
           key: `${url}-${index}`,
           url,
-          thumbUrl: readValue(asset, ["thumbnailUrl", "thumbnail_url"], url),
+          displayUrl: mediumUrl || url,
+          thumbUrl,
+          srcSet: mediumUrl
+            ? buildSrcSet([
+                { url: thumbUrl, width: thumbWidth },
+                { url: mediumUrl, width: mediumWidth },
+              ])
+            : "",
+          width: readNumber(asset, ["mediumWidth", "medium_width", "width"], undefined),
+          height: readNumber(asset, ["mediumHeight", "medium_height", "height"], undefined),
           asset,
         };
       })
       .filter(Boolean);
 
     if (heroImage && !items.some((item) => item.url === heroImage)) {
+      const thumbUrl = readValue(mediaAssets[0], ["thumbnailUrl", "thumbnail_url"], "");
+      const mediumUrl = readValue(mediaAssets[0], ["mediumUrl", "medium_url"], "");
       items.unshift({
         key: `${heroImage}-hero`,
         url: heroImage,
-        thumbUrl: readValue(mediaAssets[0], ["thumbnailUrl", "thumbnail_url"], heroImage),
+        displayUrl: mediumUrl || heroImage,
+        thumbUrl,
+        srcSet: mediumUrl
+          ? buildSrcSet([
+              { url: thumbUrl, width: 480 },
+              { url: mediumUrl, width: 1280 },
+            ])
+          : "",
         asset: {
           type: "image",
           blob_url: heroImage,
@@ -147,11 +184,11 @@ function SpeciesDetailPage() {
     }
 
     const next = galleryImages[selectedMediaIndex + 1];
-    if (!next?.url) {
+    if (!next?.displayUrl) {
       return;
     }
 
-    const loadNext = () => prefetchImage(next.url);
+    const loadNext = () => prefetchImage(next.displayUrl);
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
       const requestId = window.requestIdleCallback(loadNext);
       return () => window.cancelIdleCallback?.(requestId);
@@ -274,14 +311,18 @@ function SpeciesDetailPage() {
 
         <div className="detail-hero">
           <div className="detail-gallery-column">
-            <img
-              className="detail-main-image"
-              src={selectedMedia?.url || heroImage}
-              alt={vietnameseName || scientificName}
-              loading="eager"
-              decoding="async"
-              fetchPriority="high"
-            />
+            <div className="detail-main-image-frame">
+              <img
+                className="detail-main-image"
+                src={selectedMedia?.displayUrl || heroImage}
+                srcSet={selectedMedia?.srcSet || undefined}
+                sizes="(max-width: 900px) calc(100vw - 48px), 46vw"
+                alt={vietnameseName || scientificName}
+                loading="eager"
+                decoding="async"
+                fetchPriority="high"
+              />
+            </div>
 
             {galleryImages.length > 0 ? (
               <div
@@ -298,18 +339,26 @@ function SpeciesDetailPage() {
                     type="button"
                     className={`detail-thumb ${index === selectedMediaIndex ? "active" : ""}`}
                     onClick={() => setSelectedMediaIndex(index)}
-                    onMouseEnter={() => prefetchImage(image.url)}
+                    onMouseEnter={() => prefetchImage(image.displayUrl)}
                     aria-label={`Xem ảnh ${index + 1}`}
                     aria-pressed={index === selectedMediaIndex}
                   >
-                    <img
-                      className="detail-thumb-image"
-                      src={image.thumbUrl || image.url}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      fetchPriority="low"
-                    />
+                    {image.thumbUrl ? (
+                      <img
+                        className="detail-thumb-image"
+                        src={image.thumbUrl}
+                        width={readNumber(image.asset, ["thumbnailWidth", "thumbnail_width"], 480)}
+                        height={readNumber(image.asset, ["thumbnailHeight", "thumbnail_height"], 360)}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        fetchPriority="low"
+                      />
+                    ) : (
+                      <span className="detail-thumb-placeholder" aria-hidden="true">
+                        Ảnh {index + 1}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>

@@ -25,6 +25,18 @@ public class SpeciesMedia {
     @Field("thumbnail_format")
     private String thumbnailFormat;
 
+    @Field("medium_url")
+    private String mediumUrl;
+
+    @Field("medium_width")
+    private Integer mediumWidth;
+
+    @Field("medium_height")
+    private Integer mediumHeight;
+
+    @Field("medium_format")
+    private String mediumFormat;
+
     public String getUrl() {
         return url;
     }
@@ -95,5 +107,37 @@ public class SpeciesMedia {
 
     public void setThumbnailFormat(String thumbnailFormat) {
         this.thumbnailFormat = thumbnailFormat;
+    }
+
+    public String getMediumUrl() {
+        return mediumUrl;
+    }
+
+    public void setMediumUrl(String mediumUrl) {
+        this.mediumUrl = mediumUrl;
+    }
+
+    public Integer getMediumWidth() {
+        return mediumWidth;
+    }
+
+    public void setMediumWidth(Integer mediumWidth) {
+        this.mediumWidth = mediumWidth;
+    }
+
+    public Integer getMediumHeight() {
+        return mediumHeight;
+    }
+
+    public void setMediumHeight(Integer mediumHeight) {
+        this.mediumHeight = mediumHeight;
+    }
+
+    public String getMediumFormat() {
+        return mediumFormat;
+    }
+
+    public void setMediumFormat(String mediumFormat) {
+        this.mediumFormat = mediumFormat;
     }
 }

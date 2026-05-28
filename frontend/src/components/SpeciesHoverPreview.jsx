@@ -18,16 +18,26 @@ export default function SpeciesHoverPreview({
     species.conservationStatus ||
     "DD"
   ).toUpperCase();
+  const previewImageUrl =
+    summary?.thumbnailUrl ||
+    species.thumbnailUrl ||
+    summary?.heroImageUrl ||
+    species.heroImageUrl ||
+    "";
 
   return (
     <aside className="species-hover-popup" style={style} aria-live="polite">
-      <img
-        src={summary?.heroImageUrl || species.heroImageUrl}
-        alt={species.vietnameseName}
-        loading="lazy"
-        decoding="async"
-        fetchPriority="low"
-      />
+      {previewImageUrl ? (
+        <img
+          src={previewImageUrl}
+          alt={species.vietnameseName}
+          loading="lazy"
+          decoding="async"
+          fetchPriority="low"
+        />
+      ) : (
+        <div className="species-hover-image-placeholder" aria-hidden="true" />
+      )}
       <h4>{species.vietnameseName}</h4>
       <p className="preview-sci-name">{species.scientificName}</p>
       <p>

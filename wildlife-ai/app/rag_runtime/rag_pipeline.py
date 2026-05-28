@@ -176,6 +176,12 @@ FACT_VALUE_LABELS = {
     "habitat loss": "mất/suy thoái sinh cảnh",
     "other": "khác/chưa phân loại",
     "hunting": "săn bắt",
+    "general_caution": "thận trọng chung",
+    "general caution": "thận trọng chung",
+    "derived_precautionary_guidance": "hướng dẫn thận trọng suy ra từ dữ liệu bảo tồn/pháp lý",
+    "derived precautionary guidance": "hướng dẫn thận trọng suy ra từ dữ liệu bảo tồn/pháp lý",
+    "precautionary_warning": "cảnh báo thận trọng",
+    "precautionary warning": "cảnh báo thận trọng",
 }
 
 
@@ -209,6 +215,16 @@ def _fact_label(value: Any) -> str:
         return ""
     key = _normalize_search_text(raw)
     return FACT_VALUE_LABELS.get(key, raw)
+
+
+def _sentence_text(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    text = text[0].upper() + text[1:]
+    if text[-1] not in ".!?":
+        text += "."
+    return text
 
 
 def _fact_values(values: Any) -> list[str]:
@@ -271,7 +287,7 @@ def _data_warnings_from_profile(
     provenance = profile.get("provenance") or {}
 
     conservation_related = include_all or bool(
-        intent_set.intersection({"conservation", "threats", "population_trend", "legal", "safety"})
+        intent_set.intersection({"conservation", "threats", "population_trend", "legal"})
     )
     diet_related = include_all or "diet" in intent_set
     habitat_related = include_all or bool(
@@ -302,7 +318,8 @@ def _data_warnings_from_profile(
             raw_regions.extend(str(item).strip() for item in candidate)
         elif isinstance(candidate, str):
             raw_regions.append(candidate.strip())
-    if habitat_related and any(_normalize_search_text(region) in {"north", "central", "south"} for region in raw_regions):
+    region_label_related = include_all or bool(intent_set.intersection({"distribution", "occurrence"}))
+    if region_label_related and any(_normalize_search_text(region) in {"north", "central", "south"} for region in raw_regions):
         warnings.append("Một số vùng phân bố còn ở dạng tiếng Anh và đã được chuẩn hóa khi hiển thị.")
 
     deduped: list[str] = []
@@ -748,6 +765,7 @@ def _build_safety_legal_answer(
 
     safety_note = ""
     safety_guidance = ""
+    safety_guidance_items: list[str] = []
     safety_risk = ""
     if isinstance(safety, dict):
         safety_note = _list_to_text(
@@ -759,8 +777,12 @@ def _build_safety_legal_answer(
             ),
             empty="",
         )
+        safety_guidance_items = _fact_values(
+            safety.get("encounter_guidance") or safety.get("field_guidance")
+        )
         safety_guidance = _list_to_text(
-            _fact_values(safety.get("encounter_guidance") or safety.get("field_guidance")),
+            safety_guidance_items,
+            sep="; ",
             empty="",
         )
         safety_risk = _fact_label(safety.get("risk_level") or "")
@@ -853,10 +875,16 @@ def _build_safety_legal_answer(
             "Nếu cá thể bị thương, mắc bẫy hoặc xuất hiện trong khu dân cư, nên báo kiểm lâm/đơn vị cứu hộ địa phương.",
         ]
     else:
+        safety_statement = _sentence_text(safety_note or venom_text)
         lines = [
-            f"**An toàn với con người:** Với {label}, {safety_note or venom_text}.",
-            f"Mức cảnh báo trong kho: {safety_risk or 'thận trọng chung'}. Cách xử lý an toàn là {safety_guidance}.",
+            f"**An toàn với con người:** Không nên kết luận {label} là “hoàn toàn an toàn”. {safety_statement}",
+            f"**Mức cảnh báo trong kho:** {safety_risk or 'thận trọng chung'}.",
         ]
+        if safety_guidance_items:
+            lines.append("**Cách xử lý an toàn:**")
+            lines.extend(f"- {item.rstrip('.')}" for item in safety_guidance_items)
+        else:
+            lines.append(f"**Cách xử lý an toàn:** {safety_guidance}.")
 
     _append_limit(lines, data_warnings)
     if not data_warnings:
@@ -889,7 +917,7 @@ def _build_structured_focus_answer(
             common = _profile_common_vi(profile)
             scientific = _profile_scientific_name(profile, species_name)
             if common:
-                lines.append(f"**Tên loài:** {label} có tên Việt là {common}; tên khoa học là *{scientific}*.")
+                lines.append(f"**Tên tiếng Việt:** {common}.\n\n**Tên khoa học:** *{scientific}*.")
             else:
                 lines.append(f"**Tên loài:** Kho dữ liệu hiện chưa có tên Việt; tên khoa học là *{scientific}*.")
         elif intent == "scientific_name":
@@ -1237,7 +1265,14 @@ INTENT_KEYWORDS = {
     ],
     "habitat": [
         "sinh canh",
+        "song o moi truong",
+        "moi truong nhu the nao",
+        "moi truong",
         "moi truong song",
+        "noi song",
+        "noi o",
+        "kieu moi truong",
+        "kieu sinh canh",
         "habitat",
         "forest",
         "wetland",
@@ -1264,7 +1299,25 @@ INTENT_KEYWORDS = {
     ],
     "threats": ["de doa", "threat", "habitat_loss", "illegal_trade"],
     "population_trend": ["population", "trend", "quan the"],
-    "safety": ["danger", "venom", "doc", "nguy hiem", "encounter", "bi thuong", "mac bay", "cuu ho"],
+    "safety": [
+        "safety",
+        "safe",
+        "an toan",
+        "con nguoi",
+        "danger",
+        "venom",
+        "doc",
+        "nguy hiem",
+        "nguy hai",
+        "gay hai",
+        "tan cong",
+        "can nguoi",
+        "lam hai",
+        "encounter",
+        "bi thuong",
+        "mac bay",
+        "cuu ho",
+    ],
     "legal": ["legal", "trade", "cites", "law", "buon ban", "mua ban", "trao doi", "van chuyen", "giay phep"],
     "source": [
         "nguon",
@@ -1349,7 +1402,9 @@ Yêu cầu bắt buộc:
 4) Nếu dữ liệu thiếu hoặc chưa chắc chắn, phải ghi rõ giới hạn dữ liệu.
 5) Khi phù hợp, nêu tên khoa học, mức bảo tồn, phân bố, mối đe dọa và nguồn gốc thông tin.
 6) Khi nêu bằng chứng, tham chiếu nguồn theo nhãn [Nguồn i] có trong phần THÔNG TIN THAM KHẢO.
+   Không dùng chữ "FACT" như tên nguồn public; nếu dữ liệu lấy từ FACT CẤU TRÚC ƯU TIÊN, hãy gọi là "dữ liệu cấu trúc trong hồ sơ loài".
 7) Ưu tiên sử dụng dữ liệu cấu trúc (fact) trước, sau đó mới bổ sung diễn giải từ văn bản narrative.
+8) Không tạo bảng nếu người dùng không yêu cầu bảng. Với câu hỏi hẹp, trả lời ngắn, đúng trọng tâm.
 """
 
 
@@ -1476,8 +1531,13 @@ def build_prompt(
         structured_block = _structured_species_context(species_context)
 
     for i, chunk in enumerate(chunks, 1):
-        label = chunk["sci_name"] or chunk["common_name"] or "Thông tin chung"
-        context_parts.append(f"[Nguồn {i} - {label}]\n{chunk['text']}")
+        species_label = chunk["sci_name"] or chunk["common_name"] or "Thông tin chung"
+        source_label = chunk.get("source") or "nguồn truy xuất"
+        url = chunk.get("url") or ""
+        url_label = f" | URL: {url}" if url else ""
+        context_parts.append(
+            f"[Nguồn {i}: {source_label} | Loài: {species_label}{url_label}]\n{chunk['text']}"
+        )
 
     context = "\n\n".join(context_parts)
 
@@ -1494,6 +1554,7 @@ def build_prompt(
 - **Phân bố và sinh cảnh**: quốc gia, vùng tại Việt Nam, sinh cảnh.
 - **Đe dọa chính và hàm ý bảo tồn**.
 - **Bằng chứng dữ liệu**: liệt kê 4-8 gạch đầu dòng từ FACT/nguồn truy xuất.
+- Không tạo bảng nếu người dùng không yêu cầu bảng.
 - **Kết luận ngắn**: tóm ý chính và nêu độ chắc chắn dữ liệu.
 
 Độ dài mục tiêu: 260-450 từ nếu dữ liệu đủ; nếu thiếu dữ liệu thì vẫn giữ cấu trúc trên và ghi rõ giới hạn.
