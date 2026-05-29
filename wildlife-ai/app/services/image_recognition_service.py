@@ -6,8 +6,6 @@ import logging
 import base64
 from pathlib import Path
 
-import requests
-
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -173,6 +171,7 @@ class ImageRecognitionService:
         )
 
     def _load_image(self, image_url: str):
+        image_url = image_url.strip()
         if image_url.startswith("data:image"):
             try:
                 _, payload = image_url.split(",", 1)
@@ -182,13 +181,5 @@ class ImageRecognitionService:
                 logger.warning("Invalid data URL image payload for recognition")
                 return None
 
-        if image_url.startswith(("http://", "https://")):
-            timeout = max(1, settings.vision_download_timeout_seconds)
-            response = requests.get(image_url, timeout=timeout)
-            response.raise_for_status()
-            return self._pil_image.open(io.BytesIO(response.content)).convert("RGB")
-
-        path = Path(image_url)
-        if not path.exists():
-            return None
-        return self._pil_image.open(path).convert("RGB")
+        logger.warning("Unsupported image payload source for recognition")
+        return None

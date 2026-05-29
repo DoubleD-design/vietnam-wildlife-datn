@@ -1,5 +1,6 @@
 package com.wildlifevn.backend.dto.request;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 
 public class ChatQueryRequest {
@@ -39,5 +40,12 @@ public class ChatQueryRequest {
 
     public void setImageRejected(Boolean imageRejected) {
         this.imageRejected = imageRejected;
+    }
+
+    @AssertTrue(message = "imageUrl must be a data:image payload")
+    public boolean isSupportedImagePayload() {
+        return imageUrl == null
+                || imageUrl.isBlank()
+                || imageUrl.strip().startsWith("data:image/");
     }
 }

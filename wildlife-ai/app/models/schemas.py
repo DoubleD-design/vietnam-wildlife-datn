@@ -1,6 +1,6 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class SpeciesCardResponse(BaseModel):
@@ -52,6 +52,15 @@ class ChatQueryRequest(BaseModel):
     question: str | None = None
     imageUrl: str | None = None
     imageRejected: bool | None = False
+
+    @field_validator("imageUrl")
+    @classmethod
+    def validate_image_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return value
+        if not value.strip().startswith("data:image/"):
+            raise ValueError("imageUrl must be a data:image payload")
+        return value
 
 
 class ConfirmSpeciesRequest(BaseModel):
