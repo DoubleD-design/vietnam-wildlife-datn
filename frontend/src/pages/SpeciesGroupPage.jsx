@@ -388,7 +388,7 @@ function SpeciesGroupPage() {
   }
 
   return (
-    <main className="group-page-wrap">
+    <main className="group-page-wrap" data-testid="species-group-page">
       <header className="group-page-header group-hero">
         <div className="group-hero-content">
           <Link className="detail-back-link group-back-link" to="/">
@@ -500,7 +500,7 @@ function SpeciesGroupPage() {
           </p>
         ) : null}
 
-        <div className="species-grid species-grid-full">
+        <div className="species-grid species-grid-full" data-testid="species-grid">
           {visibleSpecies.map((species, index) => (
             <SpeciesCard
               key={species.id}

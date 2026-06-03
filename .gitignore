@@ -11,6 +11,7 @@ Preprocessed/
 # Node
 frontend/node_modules/
 frontend/dist/
+test-results/
 
 # Java
 wildlife-backend/target/

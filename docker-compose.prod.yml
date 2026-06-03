@@ -1,0 +1,38 @@
+name: wildlifevn
+
+services:
+  wildlife-ai:
+    image: wildlife-ai:local
+    container_name: wildlife-ai
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8001"
+    environment:
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-wildlife_library}
+      MONGODB_SPECIES_COLLECTION: ${MONGODB_SPECIES_COLLECTION:-species}
+      MONGODB_SPECIES_RAW_COLLECTION: ${MONGODB_SPECIES_RAW_COLLECTION:-species_raw}
+      CEREBRAS_API_KEY: ${CEREBRAS_API_KEY:?Set CEREBRAS_API_KEY}
+      CEREBRAS_MODEL: ${CEREBRAS_MODEL:-gpt-oss-120b}
+      PRELOAD_RAG_ON_STARTUP: ${PRELOAD_RAG_ON_STARTUP:-true}
+      PRELOAD_VISION_ON_STARTUP: ${PRELOAD_VISION_ON_STARTUP:-true}
+      STARTUP_FAIL_FAST: ${STARTUP_FAIL_FAST:-true}
+      RAG_PROJECT_DIR: ${RAG_PROJECT_DIR:-app/rag_runtime}
+      VISION_MODEL_WEIGHTS_PATH: ${VISION_MODEL_WEIGHTS_PATH:-model/bioclip/best_model.pth}
+      VISION_CLASS_MAPPING_PATH: ${VISION_CLASS_MAPPING_PATH:-model/bioclip/class_mapping.json}
+
+  wildlife-backend:
+    image: wildlife-backend:local
+    container_name: wildlife-backend
+    restart: unless-stopped
+    depends_on:
+      wildlife-ai:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      MONGODB_URI: ${MONGODB_URI:?Set MONGODB_URI}
+      MONGODB_DATABASE: ${MONGODB_DATABASE:-wildlife_library}
+      AI_SERVER_BASE_URL: http://wildlife-ai:8001
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174}
+      JAVA_OPTS: ${JAVA_OPTS:--XX:MaxRAMPercentage=75.0}

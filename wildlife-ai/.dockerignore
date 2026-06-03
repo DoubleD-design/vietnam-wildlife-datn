@@ -1,0 +1,15 @@
+.env
+.env.*
+.hf_cache/
+
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+
+.DS_Store
+*.log
+*.md
+
+tmp/
+test-results/

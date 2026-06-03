@@ -1,0 +1,9 @@
+.git/
+.idea/
+target/
+src/test/
+
+.DS_Store
+*.iml
+*.log
+*.md

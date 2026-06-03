@@ -230,7 +230,7 @@ function HomePage() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-testid="home-shell">
       <header className="top-nav">
         <div className="brand-block">
           <p className="brand-eyebrow">Vietnam Wildlife</p>

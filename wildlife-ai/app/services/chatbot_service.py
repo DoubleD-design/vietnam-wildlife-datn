@@ -11,7 +11,11 @@ from app.models.schemas import (
 from app.core.config import settings
 from app.services.image_recognition_service import ImageRecognitionService
 from app.services.rag_pipeline_service import RagPipelineService
-from app.services.session_store import ChatSessionState
+from app.services.session_store import (
+    ChatSessionState,
+    InMemoryChatSessionStore,
+    SessionLockManager,
+)
 from app.services.species_service import SpeciesService
 
 UNKNOWN_IMAGE_MESSAGE = "Xin lỗi, tôi chưa nhận diện được loài này trong cơ sở dữ liệu hiện tại. Vui lòng thử ảnh khác rõ hơn."
@@ -32,22 +36,31 @@ class ChatbotService:
         self.species_service = species_service
         self.rag_service = RagPipelineService()
         self.image_recognition = ImageRecognitionService()
-        self.sessions: dict[str, ChatSessionState] = {}
+        self.session_store = InMemoryChatSessionStore()
+        self.session_locks = SessionLockManager()
 
     def query(self, req: ChatQueryRequest) -> ChatQueryResponse:
-        response, _ = self._query_internal(req, include_debug=False)
-        return response
+        with self.session_locks.lock(req.sessionId):
+            state = self.session_store.get(req.sessionId)
+            response, _ = self._query_internal(req, state, include_debug=False)
+            self.session_store.save(req.sessionId, state)
+            return response
 
     def query_debug(self, req: ChatQueryRequest) -> dict[str, Any]:
-        response, debug = self._query_internal(req, include_debug=True)
-        data = response.model_dump()
-        data["debug"] = debug or {}
-        return data
+        with self.session_locks.lock(req.sessionId):
+            state = self.session_store.get(req.sessionId)
+            response, debug = self._query_internal(req, state, include_debug=True)
+            self.session_store.save(req.sessionId, state)
+            data = response.model_dump()
+            data["debug"] = debug or {}
+            return data
 
     def _query_internal(
-        self, req: ChatQueryRequest, include_debug: bool = False
+        self,
+        req: ChatQueryRequest,
+        state: ChatSessionState,
+        include_debug: bool = False,
     ) -> tuple[ChatQueryResponse, dict[str, Any] | None]:
-        state = self.sessions.setdefault(req.sessionId, ChatSessionState())
         has_image = bool(req.imageUrl and req.imageUrl.strip())
         has_question = bool(req.question and req.question.strip())
 
@@ -66,66 +79,111 @@ class ChatbotService:
         return self._handle_text_flow(req.question or "", state, include_debug)
 
     def rag_health(self, load: bool = False) -> dict:
-        return self.rag_service.health(load=load)
+        health = self.rag_service.health(load=load)
+        health.update(
+            {
+                "preloadRagOnStartup": settings.preload_rag_on_startup,
+                "preloadVisionOnStartup": settings.preload_vision_on_startup,
+                "startupFailFast": settings.startup_fail_fast,
+                "visionLoaded": self.image_recognition.is_ready,
+                "sessionStore": "memory",
+                "sessionsResetOnRestart": True,
+            }
+        )
+        return health
+
+    def preload_runtime(self) -> dict[str, Any]:
+        errors: list[str] = []
+        rag_health: dict[str, Any] | None = None
+        vision_loaded = self.image_recognition.is_ready
+
+        if settings.preload_rag_on_startup:
+            rag_health = self.rag_service.health(load=True)
+            if not rag_health.get("loaded"):
+                errors.append(str(rag_health.get("loadError") or "RAG preload failed"))
+
+        if settings.preload_vision_on_startup:
+            try:
+                self.image_recognition.preload()
+                vision_loaded = True
+            except Exception as exc:
+                errors.append(f"BioCLIP preload failed: {type(exc).__name__}: {exc}")
+
+        result = {
+            "rag": rag_health or self.rag_service.health(load=False),
+            "visionLoaded": vision_loaded,
+            "errors": errors,
+        }
+        if errors and settings.startup_fail_fast:
+            raise RuntimeError("; ".join(errors))
+        return result
 
     def confirm_species(self, session_id: str, species_id: str) -> ChatQueryResponse:
-        state = self.sessions.setdefault(session_id, ChatSessionState())
-        species = self.species_service.get_species_doc(species_id)
-        previous_name = state.current_species_name
+        with self.session_locks.lock(session_id):
+            state = self.session_store.get(session_id)
+            species = self.species_service.get_species_doc(species_id)
 
-        state.current_species_id = str(species.get("_id"))
-        state.current_species_name = species.get("common_name_vi") or species.get(
-            "scientific_name"
-        )
-        state.awaiting_confirmation = False
-        state.pending_candidates = []
-
-        current_label = (
-            state.current_species_name or species.get("scientific_name") or "loài này"
-        )
-        updated_message = f"Loài đang được hỏi là {current_label}."
-
-        if state.pending_question:
-            answer, answer_status, _ = self._answer_with_context(
-                state.pending_question, species
+            state.current_species_id = str(species.get("_id"))
+            state.current_species_name = species.get("common_name_vi") or species.get(
+                "scientific_name"
             )
-            state.pending_question = None
-            return ChatQueryResponse(
-                status=answer_status,
-                message=f"{updated_message} Tôi cũng đã trả lời câu hỏi của bạn.",
-                answer=answer,
+            state.awaiting_confirmation = False
+            state.pending_candidates = []
+
+            current_label = (
+                state.current_species_name
+                or species.get("scientific_name")
+                or "loài này"
+            )
+            updated_message = f"Loài đang được hỏi là {current_label}."
+
+            if state.pending_question:
+                answer, answer_status, _ = self._answer_with_context(
+                    state.pending_question, species
+                )
+                state.pending_question = None
+                response = ChatQueryResponse(
+                    status=answer_status,
+                    message=f"{updated_message} Tôi cũng đã trả lời câu hỏi của bạn.",
+                    answer=answer,
+                    activeSpeciesId=state.current_species_id,
+                    activeSpeciesName=state.current_species_name,
+                    candidates=[],
+                )
+                self.session_store.save(session_id, state)
+                return response
+
+            response = ChatQueryResponse(
+                status="SPECIES_CONFIRMED",
+                message=updated_message,
                 activeSpeciesId=state.current_species_id,
                 activeSpeciesName=state.current_species_name,
                 candidates=[],
             )
-
-        return ChatQueryResponse(
-            status="SPECIES_CONFIRMED",
-            message=updated_message,
-            activeSpeciesId=state.current_species_id,
-            activeSpeciesName=state.current_species_name,
-            candidates=[],
-        )
+            self.session_store.save(session_id, state)
+            return response
 
     def clear_species(self, session_id: str) -> ChatQueryResponse:
-        state = self.sessions.setdefault(session_id, ChatSessionState())
-        previous_name = state.current_species_name
-        state.current_species_id = None
-        state.current_species_name = None
-        state.pending_question = None
-        state.awaiting_confirmation = False
-        state.pending_candidates = []
-        state.recent_multi_species_entities = []
-
-        return ChatQueryResponse(
-            status="CLEARED",
-            message=(
-                f"Đã xóa ngữ cảnh loài đang chọn ({previous_name}). Bạn có thể hỏi chung hoặc gửi ảnh mới."
-                if previous_name
-                else "Đã xóa ngữ cảnh loài đang chọn. Bạn có thể hỏi chung hoặc gửi ảnh mới."
-            ),
-            candidates=[],
-        )
+        with self.session_locks.lock(session_id):
+            state = self.session_store.get(session_id)
+            previous_name = state.current_species_name
+            state.current_species_id = None
+            state.current_species_name = None
+            state.pending_question = None
+            state.awaiting_confirmation = False
+            state.pending_candidates = []
+            state.recent_multi_species_entities = []
+            response = ChatQueryResponse(
+                status="CLEARED",
+                message=(
+                    f"Đã xóa ngữ cảnh loài đang chọn ({previous_name}). Bạn có thể hỏi chung hoặc gửi ảnh mới."
+                    if previous_name
+                    else "Đã xóa ngữ cảnh loài đang chọn. Bạn có thể hỏi chung hoặc gửi ảnh mới."
+                ),
+                candidates=[],
+            )
+            self.session_store.save(session_id, state)
+            return response
 
     def _handle_image_flow(
         self, req: ChatQueryRequest, state: ChatSessionState, has_question: bool

@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     mongodb_species_collection: str = "species"
     mongodb_species_raw_collection: str = "species_raw"
     app_name: str = "wildlife-ai"
+    preload_rag_on_startup: bool = True
+    preload_vision_on_startup: bool = True
+    startup_fail_fast: bool = True
     rag_project_dir: str = "app/rag_runtime"
     cerebras_api_key: str = ""
     cerebras_model: str = "qwen-3-235b-a22b-instruct-2507"
@@ -18,8 +21,8 @@ class Settings(BaseSettings):
     vision_use_remote_backbone: bool = False
     vision_backbone: str = "hf-hub:imageomics/bioclip"
     vision_local_arch: str = "ViT-B-16"
-    vision_model_weights_path: str = "../Training/bioclip_model/best_model.pth"
-    vision_class_mapping_path: str = "../Training/bioclip_model/class_mapping.json"
+    vision_model_weights_path: str = "model/bioclip/best_model.pth"
+    vision_class_mapping_path: str = "model/bioclip/class_mapping.json"
     vision_top_k: int = 6
     vision_min_confidence: float = 0.0
     vision_download_timeout_seconds: int = 20

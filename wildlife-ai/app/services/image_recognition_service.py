@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import base64
+import threading
 from pathlib import Path
 
 from app.core.config import settings
@@ -18,6 +19,8 @@ class ImageRecognitionService:
         self._transform = None
         self._idx_to_class: dict[int, str] = {}
         self._torch = None
+        self._pil_image = None
+        self._load_lock = threading.Lock()
 
     def predict(self, image_url: str, top_k: int = 5) -> list[tuple[str, float]]:
         self._ensure_ready()
@@ -45,10 +48,23 @@ class ImageRecognitionService:
             out.append((class_name, confidence))
         return out
 
+    def preload(self) -> None:
+        self._ensure_ready()
+
+    @property
+    def is_ready(self) -> bool:
+        return self._model is not None and self._transform is not None
+
     def _ensure_ready(self) -> None:
-        if self._model is not None:
+        if self.is_ready:
             return
 
+        with self._load_lock:
+            if self.is_ready:
+                return
+            self._load_runtime()
+
+    def _load_runtime(self) -> None:
         try:
             import torch
             import torch.nn as nn
@@ -85,8 +101,8 @@ class ImageRecognitionService:
         else:
             self._device = torch.device("cpu")
 
-        mapping_path = Path(settings.vision_class_mapping_path)
-        weights_path = Path(settings.vision_model_weights_path)
+        mapping_path = self._resolve_path(settings.vision_class_mapping_path)
+        weights_path = self._resolve_path(settings.vision_model_weights_path)
 
         if not mapping_path.exists():
             raise RuntimeError(f"Class mapping not found: {mapping_path}")
@@ -169,6 +185,20 @@ class ImageRecognitionService:
                 ),
             ]
         )
+
+    def _resolve_path(self, configured_path: str) -> Path:
+        path = Path(configured_path).expanduser()
+        if path.is_absolute():
+            return path
+
+        service_file = Path(__file__).resolve()
+        wildlife_ai_root = service_file.parents[2]
+        candidates = [Path.cwd() / path, wildlife_ai_root / path]
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved.exists():
+                return resolved
+        return candidates[-1].resolve()
 
     def _load_image(self, image_url: str):
         image_url = image_url.strip()

@@ -61,6 +61,7 @@ export default function SpeciesCard({
   return (
     <article
       className={`species-card ${className}`.trim()}
+      data-testid="species-card"
       onMouseEnter={(event) => onHover?.(species, event)}
       onFocus={(event) => onHover?.(species, event)}
       onMouseLeave={onLeave}

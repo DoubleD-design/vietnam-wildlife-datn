@@ -79,6 +79,7 @@ function ChatbotPage() {
   const canSend = useMemo(() => {
     return question.trim() || selectedFile;
   }, [question, selectedFile]);
+  const isBusy = isSending || isPreparingImage;
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -195,7 +196,7 @@ function ChatbotPage() {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!canSend || isSending || isPreparingImage) {
+    if (!canSend || isBusy) {
       return;
     }
 
@@ -302,7 +303,7 @@ function ChatbotPage() {
   }
 
   return (
-    <main className="chat-shell">
+    <main className="chat-shell" data-testid="chatbot-page">
       <header className="chat-page-banner">
         {/* <h2>
           <span>Hệ thống trợ lý động vật hoang dã</span>
@@ -342,6 +343,7 @@ function ChatbotPage() {
               <article
                 key={`${message.role}-${index}`}
                 className={`chat-row ${isUser ? "user" : "assistant"}`}
+                data-testid={isUser ? "chat-message-user" : "chat-message-assistant"}
               >
                 {!isUser ? (
                   <div className="chat-message-avatar bot" aria-hidden="true">
@@ -420,6 +422,7 @@ function ChatbotPage() {
 
           <div className="chat-input-row">
             <input
+              data-testid="chatbot-input"
               onPaste={handlePaste}
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
@@ -445,7 +448,8 @@ function ChatbotPage() {
             <button
               type="submit"
               className="chat-send-btn"
-              disabled={!canSend || isSending || isPreparingImage}
+              data-testid="chatbot-send-button"
+              disabled={!canSend || isBusy}
             >
               {isPreparingImage
                 ? "Đang nén ảnh..."

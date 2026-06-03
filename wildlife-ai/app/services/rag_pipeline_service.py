@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,7 @@ class RagPipelineService:
     _shared_load_error: str | None = None
     _shared_last_query_error: str | None = None
     _shared_resolved_rag_dir: Path | None = None
+    _shared_load_lock = threading.Lock()
 
     def __init__(self) -> None:
         self._rag_query_func = self.__class__._shared_rag_query_func
@@ -96,85 +98,90 @@ class RagPipelineService:
         if self._rag_query_func is not None:
             return self._rag_query_func
 
-        if self.__class__._shared_rag_query_func is not None:
-            self._rag_query_func = self.__class__._shared_rag_query_func
-            self._load_error = self.__class__._shared_load_error
-            return self._rag_query_func
+        with self.__class__._shared_load_lock:
+            if self.__class__._shared_rag_query_func is not None:
+                self._rag_query_func = self.__class__._shared_rag_query_func
+                self._load_error = self.__class__._shared_load_error
+                return self._rag_query_func
 
-        # Avoid reloading on every request after a known fatal load error.
-        if self.__class__._shared_load_error is not None:
-            self._load_error = self.__class__._shared_load_error
-            return None
-
-        try:
-            # rag_pipeline reads configuration from os.environ directly.
-            # Mirror pydantic settings into process env before import.
-            if settings.cerebras_api_key:
-                os.environ.setdefault("CEREBRAS_API_KEY", settings.cerebras_api_key)
-            if settings.cerebras_model:
-                os.environ.setdefault("CEREBRAS_MODEL", settings.cerebras_model)
-            if settings.cerebras_api_url:
-                os.environ.setdefault("CEREBRAS_API_URL", settings.cerebras_api_url)
-            os.environ.setdefault("MONGODB_URI", settings.mongodb_uri)
-            os.environ.setdefault("MONGODB_DATABASE", settings.mongodb_database)
-            os.environ.setdefault(
-                "MONGODB_SPECIES_RAW_COLLECTION",
-                settings.mongodb_species_raw_collection,
-            )
-            os.environ.setdefault(
-                "RAG_MAX_API_RETRIES", str(settings.rag_max_api_retries)
-            )
-            os.environ.setdefault(
-                "RAG_MAX_RETRY_WAIT_SECONDS",
-                str(settings.rag_max_retry_wait_seconds),
-            )
-            os.environ.setdefault(
-                "RAG_GENERATION_TIMEOUT_SECONDS",
-                str(settings.rag_generation_timeout_seconds),
-            )
-            os.environ.setdefault("RAG_TOP_K", str(settings.rag_top_k))
-            if settings.hf_home:
-                os.environ.setdefault("HF_HOME", settings.hf_home)
-            if settings.hf_hub_offline:
-                os.environ.setdefault("HF_HUB_OFFLINE", settings.hf_hub_offline)
-            if settings.hf_token:
-                os.environ.setdefault("HF_TOKEN", settings.hf_token)
-                os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", settings.hf_token)
-
-            rag_dir = self._resolve_rag_dir()
-            if not rag_dir.exists():
-                self._load_error = f"RAG directory not found: {rag_dir}"
-                self.__class__._shared_load_error = self._load_error
+            # Avoid reloading on every request after a known fatal load error.
+            if self.__class__._shared_load_error is not None:
+                self._load_error = self.__class__._shared_load_error
                 return None
 
-            if str(rag_dir) not in sys.path:
-                sys.path.insert(0, str(rag_dir))
-
-            # rag_pipeline.py reads relative knowledge_base paths during import,
-            # so we import it with cwd set to the RAG project once.
-            original_cwd = Path.cwd()
             try:
-                os.chdir(rag_dir)
-                module = importlib.import_module("rag_pipeline")
-            finally:
-                os.chdir(original_cwd)
+                # rag_pipeline reads configuration from os.environ directly.
+                # Mirror pydantic settings into process env before import.
+                if settings.cerebras_api_key:
+                    os.environ.setdefault("CEREBRAS_API_KEY", settings.cerebras_api_key)
+                if settings.cerebras_model:
+                    os.environ.setdefault("CEREBRAS_MODEL", settings.cerebras_model)
+                if settings.cerebras_api_url:
+                    os.environ.setdefault("CEREBRAS_API_URL", settings.cerebras_api_url)
+                os.environ.setdefault("MONGODB_URI", settings.mongodb_uri)
+                os.environ.setdefault("MONGODB_DATABASE", settings.mongodb_database)
+                os.environ.setdefault(
+                    "MONGODB_SPECIES_RAW_COLLECTION",
+                    settings.mongodb_species_raw_collection,
+                )
+                os.environ.setdefault(
+                    "RAG_MAX_API_RETRIES", str(settings.rag_max_api_retries)
+                )
+                os.environ.setdefault(
+                    "RAG_MAX_RETRY_WAIT_SECONDS",
+                    str(settings.rag_max_retry_wait_seconds),
+                )
+                os.environ.setdefault(
+                    "RAG_GENERATION_TIMEOUT_SECONDS",
+                    str(settings.rag_generation_timeout_seconds),
+                )
+                os.environ.setdefault("RAG_TOP_K", str(settings.rag_top_k))
+                if settings.hf_home:
+                    os.environ.setdefault("HF_HOME", settings.hf_home)
+                if settings.hf_hub_offline:
+                    os.environ.setdefault("HF_HUB_OFFLINE", settings.hf_hub_offline)
+                if settings.hf_token:
+                    os.environ.setdefault("HF_TOKEN", settings.hf_token)
+                    os.environ.setdefault("HUGGING_FACE_HUB_TOKEN", settings.hf_token)
 
-            self._rag_query_func = getattr(module, "rag_query", None)
-            if self._rag_query_func is None:
-                self._load_error = "rag_query not found in rag_pipeline"
+                rag_dir = self._resolve_rag_dir()
+                if not rag_dir.exists():
+                    self._load_error = f"RAG directory not found: {rag_dir}"
+                    self.__class__._shared_load_error = self._load_error
+                    return None
+
+                if str(rag_dir) not in sys.path:
+                    sys.path.insert(0, str(rag_dir))
+
+                # rag_pipeline.py reads relative knowledge_base paths during import,
+                # so we import it with cwd set to the RAG project once.
+                original_cwd = Path.cwd()
+                try:
+                    os.chdir(rag_dir)
+                    module = importlib.import_module("rag_pipeline")
+                finally:
+                    os.chdir(original_cwd)
+
+                self._rag_query_func = getattr(module, "rag_query", None)
+                if self._rag_query_func is None:
+                    self._load_error = "rag_query not found in rag_pipeline"
+                    self.__class__._shared_load_error = self._load_error
+                    return None
+
+                self.__class__._shared_rag_query_func = self._rag_query_func
+                self.__class__._shared_load_error = None
+                self.__class__._shared_resolved_rag_dir = rag_dir
+
+                return self._rag_query_func
+            except BaseException as exc:
+                self._load_error = f"{type(exc).__name__}: {exc}"
                 self.__class__._shared_load_error = self._load_error
+                logger.error(
+                    "RAG load failed: %s\n%s",
+                    self._load_error,
+                    traceback.format_exc(),
+                )
                 return None
-
-            self.__class__._shared_rag_query_func = self._rag_query_func
-            self.__class__._shared_load_error = None
-            self.__class__._shared_resolved_rag_dir = rag_dir
-
-            return self._rag_query_func
-        except BaseException as exc:
-            self._load_error = f"{type(exc).__name__}: {exc}"
-            self.__class__._shared_load_error = self._load_error
-            logger.error("RAG load failed: %s\n%s", self._load_error, traceback.format_exc())
-            return None
 
     def _resolve_rag_dir(self) -> Path:
         configured = Path(settings.rag_project_dir).expanduser()

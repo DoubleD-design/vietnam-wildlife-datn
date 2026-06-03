@@ -367,7 +367,9 @@ function SpeciesDetailPage() {
 
           <div className="detail-content">
             <p className="detail-tag">Hồ sơ loài</p>
-            <h1>{vietnameseName || "Chưa có tên tiếng Việt"}</h1>
+            <h1 data-testid="detail-title">
+              {vietnameseName || "Chưa có tên tiếng Việt"}
+            </h1>
             <p className="detail-sci-name">{scientificName}</p>
             {commonNameEn ? (
               <p className="detail-summary">Tên tiếng Anh: {commonNameEn}</p>
@@ -395,6 +397,7 @@ function SpeciesDetailPage() {
             <Link
               to={`/qa?speciesId=${encodeURIComponent(speciesId)}&speciesName=${encodeURIComponent(vietnameseName || scientificName || "")}`}
               className="detail-chatbot-btn"
+              data-testid="detail-chatbot-link"
             >
               Hỏi Chatbot về loài này
             </Link>
