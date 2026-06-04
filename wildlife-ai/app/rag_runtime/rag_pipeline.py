@@ -1182,29 +1182,65 @@ def retrieve(
     results = []
     seen = set()
     normalized_target = _normalize_sci_name(sci_name)
+    normalized_query = _normalize_search_text(query)
+    query_tokens = _tokenize_search(query)
+
+    def add_chunk(chunk: dict[str, Any], score: float, **extra_scores: Any) -> None:
+        item = chunk.copy()
+        item["score"] = score
+        item.update(extra_scores)
+        key = (
+            item.get("sci_name", ""),
+            item.get("source", ""),
+            item.get("url", ""),
+            item.get("text", "")[:120],
+        )
+        if key not in seen:
+            seen.add(key)
+            results.append(item)
+
+    def is_exact_name_match(chunk: dict[str, Any]) -> bool:
+        sci_text = _normalize_search_text(str(chunk.get("sci_name") or ""))
+        common_text = _normalize_search_text(str(chunk.get("common_name") or ""))
+        if normalized_query in {sci_text, common_text}:
+            return True
+
+        sci_tokens = _tokenize_search(sci_text)
+        common_tokens = _tokenize_search(common_text)
+        return bool(
+            (sci_tokens and sci_tokens.issubset(query_tokens))
+            or (common_tokens and common_tokens.issubset(query_tokens))
+        )
 
     # Bước 1: Nếu có sci_name → lấy trực tiếp các chunk của loài đó
     if normalized_target:
         for chunk in metadata:
             if _normalize_sci_name(chunk.get("sci_name", "")) == normalized_target:
-                chunk = chunk.copy()
-                chunk["score"] = 1.0  # exact match → score cao nhất
-                key = (
-                    chunk.get("sci_name", ""),
-                    chunk.get("source", ""),
-                    chunk.get("url", ""),
-                    chunk.get("text", "")[:120],
-                )
-                if key not in seen:
-                    seen.add(key)
-                    results.append(chunk)
+                add_chunk(chunk, 1.0, exact_name_match=True)
                 if len(results) >= top_k // 2:  # lấy tối đa top_k/2 chunk của loài
+                    break
+
+    # Bước 1b: Nếu người dùng hỏi bằng tên thường gọi ngắn, FAISS có thể không kéo
+    # đúng ứng viên để lexical score chạy. Quét metadata trước giúp bắt các alias như
+    # "Ngoé" hoặc câu hỏi có chứa tên Việt của loài.
+    if not normalized_target and normalized_query:
+        exact_limit = max(1, top_k // 2)
+        for chunk in metadata:
+            if is_exact_name_match(chunk):
+                add_chunk(
+                    chunk,
+                    0.95,
+                    semantic_score=0.0,
+                    lexical_score=1.0,
+                    exact_name_match=True,
+                    alpha=float(alpha),
+                )
+                if len(results) >= exact_limit:
                     break
 
     # Bước 2: Vector search cho phần còn lại
     remaining = top_k - len(results)
     if remaining > 0:
-        query_tokens = _tokenize_search(query)
         vec = embed_model.encode([query], normalize_embeddings=True)
         scores, indices = index.search(
             np.array(vec, dtype=np.float32), max(top_k * 5, 10)
@@ -1228,19 +1264,13 @@ def retrieve(
                 if chunk_sci and chunk_sci != normalized_target:
                     continue
 
-            chunk["score"] = hybrid_score
-            chunk["semantic_score"] = float(sem_score)
-            chunk["lexical_score"] = float(lex_score)
-            chunk["alpha"] = float(alpha)
-            key = (
-                chunk.get("sci_name", ""),
-                chunk.get("source", ""),
-                chunk.get("url", ""),
-                chunk.get("text", "")[:120],
+            add_chunk(
+                chunk,
+                hybrid_score,
+                semantic_score=float(sem_score),
+                lexical_score=float(lex_score),
+                alpha=float(alpha),
             )
-            if key not in seen:
-                seen.add(key)
-                results.append(chunk)
             if len(results) >= top_k:
                 break
 

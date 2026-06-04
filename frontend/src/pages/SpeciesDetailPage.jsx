@@ -126,6 +126,7 @@ function SpeciesDetailPage() {
         }
         const thumbUrl = readValue(asset, ["thumbnailUrl", "thumbnail_url"], "");
         const mediumUrl = readValue(asset, ["mediumUrl", "medium_url"], "");
+        const thumbnailDisplayUrl = thumbUrl || mediumUrl || url;
         const thumbWidth = readNumber(asset, ["thumbnailWidth", "thumbnail_width"], THUMBNAIL_WIDTH);
         const mediumWidth = readNumber(asset, ["mediumWidth", "medium_width"], 1280);
         return {
@@ -133,6 +134,7 @@ function SpeciesDetailPage() {
           url,
           displayUrl: mediumUrl || url,
           thumbUrl,
+          thumbnailDisplayUrl,
           srcSet: mediumUrl
             ? buildSrcSet([
                 { url: thumbUrl, width: thumbWidth },
@@ -149,11 +151,13 @@ function SpeciesDetailPage() {
     if (heroImage && !items.some((item) => item.url === heroImage)) {
       const thumbUrl = readValue(mediaAssets[0], ["thumbnailUrl", "thumbnail_url"], "");
       const mediumUrl = readValue(mediaAssets[0], ["mediumUrl", "medium_url"], "");
+      const thumbnailDisplayUrl = thumbUrl || mediumUrl || heroImage;
       items.unshift({
         key: `${heroImage}-hero`,
         url: heroImage,
         displayUrl: mediumUrl || heroImage,
         thumbUrl,
+        thumbnailDisplayUrl,
         srcSet: mediumUrl
           ? buildSrcSet([
               { url: thumbUrl, width: 480 },
@@ -343,10 +347,10 @@ function SpeciesDetailPage() {
                     aria-label={`Xem ảnh ${index + 1}`}
                     aria-pressed={index === selectedMediaIndex}
                   >
-                    {image.thumbUrl ? (
+                    {image.thumbnailDisplayUrl ? (
                       <img
                         className="detail-thumb-image"
-                        src={image.thumbUrl}
+                        src={image.thumbnailDisplayUrl}
                         width={readNumber(image.asset, ["thumbnailWidth", "thumbnail_width"], 480)}
                         height={readNumber(image.asset, ["thumbnailHeight", "thumbnail_height"], 360)}
                         alt=""
