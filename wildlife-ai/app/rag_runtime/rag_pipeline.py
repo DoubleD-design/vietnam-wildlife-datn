@@ -1360,12 +1360,31 @@ INTENT_KEYWORDS = {
     "data_quality": ["unknown", "year", "provenance", "quality", "missing"],
     "altitude": ["elevation", "altitude", "do cao"],
     "activity_time": ["activity", "diurnal", "nocturnal", "ban ngay", "ban dem"],
+    "reproduction": [
+        "sinh san",
+        "mua sinh san",
+        "breeding",
+        "reproduction",
+        "de trung",
+        "de con",
+        "clutch",
+        "litter",
+        "incubation",
+        "gestation",
+        "parental care",
+    ],
+    "identification": [
+        "nhan biet",
+        "hinh dang",
+        "identification",
+        "morphology",
+        "male",
+        "female",
+    ],
     "behavior": [
         "tap tinh",
         "hanh vi",
-        "sinh san",
         "behavior",
-        "breeding",
         "activity",
     ],
 }
@@ -1426,7 +1445,7 @@ SYSTEM_PROMPT = """Bạn là chuyên gia về động vật hoang dã Việt Nam
 Nhiệm vụ: trả lời đúng trọng tâm câu hỏi, đầy đủ thông tin, có cấu trúc rõ ràng.
 
 Yêu cầu bắt buộc:
-1) Chỉ sử dụng dữ liệu trong phần THÔNG TIN THAM KHẢO, không bịa thêm.
+1) Chỉ sử dụng dữ liệu trong phần THÔNG TIN THAM KHẢO, trừ khi hướng dẫn của intent sinh sản cho phép dùng kiến thức sinh học nền của mô hình.
 2) Trả lời bằng tiếng Việt, mạch lạc, ưu tiên thông tin thực chứng.
 3) Tránh lan man; mọi đoạn đều phải liên quan trực tiếp đến câu hỏi.
 4) Nếu dữ liệu thiếu hoặc chưa chắc chắn, phải ghi rõ giới hạn dữ liệu.
@@ -1475,6 +1494,8 @@ def _intent_title(intent: str) -> str:
         "legal": "Pháp lý",
         "source": "Nguồn dữ liệu",
         "data_quality": "Chất lượng dữ liệu",
+        "reproduction": "Sinh sản",
+        "identification": "Nhận dạng",
         "behavior": "Tập tính",
         "general": "Trả lời",
     }.get(intent, intent)
@@ -1499,7 +1520,9 @@ def _intent_description(intent: str) -> str:
         "legal": "trả lời thận trọng về pháp lý, không thay thế tư vấn pháp lý",
         "source": "trả lời nguồn dữ liệu, provenance hoặc bằng chứng truy xuất",
         "data_quality": "trả lời phần dữ liệu thiếu/chưa rõ hoặc chắc chắn nhất",
-        "behavior": "trả lời tập tính, hoạt động, sinh sản hoặc đặc điểm hành vi",
+        "reproduction": "trả lời thông tin sinh sản, nêu các dữ kiện được sử dụng và giải thích lập luận; không nêu độ chắc chắn",
+        "identification": "trả lời dấu hiệu hình thái hoặc cách nhận biết loài",
+        "behavior": "trả lời tập tính, hoạt động hoặc đặc điểm hành vi",
         "general": "trả lời trực tiếp câu hỏi",
     }.get(intent, "trả lời đúng ý này")
 
@@ -1525,11 +1548,23 @@ def _build_question_plan_instruction(question_plan: dict[str, Any] | None) -> st
     for index, intent in enumerate(intents, 1):
         lines.append(f"{index}. {intent} - {_intent_description(intent)}.")
 
+    lines.extend(["", "Ràng buộc:"])
+    if "reproduction" in intents:
+        lines.extend(
+            [
+                "- Ưu tiên THÔNG TIN THAM KHẢO và FACT CẤU TRÚC ƯU TIÊN.",
+                "- Nếu hai phần trên thiếu dữ liệu sinh sản, được dùng kiến thức sinh học nền ổn định của mô hình về đúng loài đang xét để tổng hợp câu trả lời.",
+                "- Phải tách rõ dữ kiện nào đến từ nguồn RAG và dữ kiện nào đến từ kiến thức nền của mô hình.",
+                "- Không gắn nhãn [Nguồn i] cho kiến thức nền của mô hình; không tạo tên nguồn, URL hoặc trích dẫn giả.",
+                "- Không suy diễn đặc điểm riêng của loài chỉ từ họ/bộ nếu không có kiến thức species-specific.",
+            ]
+        )
+    else:
+        lines.append(
+            "- Chỉ dùng dữ liệu trong THÔNG TIN THAM KHẢO và FACT CẤU TRÚC ƯU TIÊN."
+        )
     lines.extend(
         [
-            "",
-            "Ràng buộc:",
-            "- Chỉ dùng dữ liệu trong THÔNG TIN THAM KHẢO và FACT CẤU TRÚC ƯU TIÊN.",
             "- Mỗi mục tối đa 2-3 câu.",
             "- Nếu thiếu dữ liệu cho mục nào, nói rõ kho dữ liệu hiện chưa có thông tin đủ.",
             "- Không viết tổng quan dài trước các mục chính.",
@@ -1541,8 +1576,18 @@ def _build_question_plan_instruction(question_plan: dict[str, Any] | None) -> st
 
     lines.extend(["", "Định dạng bắt buộc:"])
     for intent in intents:
-        lines.append(f"**{_intent_title(intent)}:** ...")
-    lines.append("**Giới hạn dữ liệu:** ... (chỉ ghi nếu có phần thiếu/chưa chắc)")
+        if intent == "reproduction":
+            lines.extend(
+                [
+                    "**Thông tin sinh sản:** ...",
+                    "**Căn cứ:** liệt kê các dữ kiện đã sử dụng và ghi rõ từng dữ kiện là từ RAG hay kiến thức nền của mô hình.",
+                    "**Lập luận:** giải thích ngắn cách đi từ dữ kiện đến kết quả.",
+                    "- Không nêu độ chắc chắn và không tạo URL/nguồn không có trong thông tin tham khảo.",
+                ]
+            )
+        else:
+            lines.append(f"**{_intent_title(intent)}:** ...")
+    lines.append("**Giới hạn dữ liệu:** ... (chỉ ghi nếu thiếu dữ liệu)")
     return "\n".join(lines)
 
 

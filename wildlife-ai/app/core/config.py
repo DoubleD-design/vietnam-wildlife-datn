@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     rag_max_api_retries: int = 3
     rag_max_retry_wait_seconds: int = 3
     rag_generation_timeout_seconds: int = 20
+    chat_session_ttl_seconds: int = 3600
+    chat_history_turn_limit: int = 6
     vision_use_remote_backbone: bool = False
     vision_backbone: str = "hf-hub:imageomics/bioclip"
     vision_local_arch: str = "ViT-B-16"

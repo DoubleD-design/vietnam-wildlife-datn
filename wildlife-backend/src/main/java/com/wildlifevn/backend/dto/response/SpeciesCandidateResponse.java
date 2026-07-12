@@ -4,5 +4,6 @@ public record SpeciesCandidateResponse(
         String speciesId,
         String scientificName,
         String vietnameseName,
-        String heroImageUrl) {
+        String heroImageUrl,
+        String thumbnailUrl) {
 }

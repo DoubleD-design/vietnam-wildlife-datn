@@ -180,41 +180,59 @@ class SpeciesService:
         return self._find_by_id(species_id)
 
     def find_species_mentioned(self, question: str) -> dict[str, Any] | None:
-        if not question.strip():
-            return None
+        mentions = self.find_species_mentions(question)
+        return mentions[0] if mentions else None
 
-        # Try to extract species names from the question
-        # Look for scientific names (e.g., "Genus species") or Vietnamese names
-        question_lower = question.lower()
+    def find_species_mentions(self, question: str) -> list[dict[str, Any]]:
+        normalized_question = self._normalize_query_text(question)
+        if not normalized_question:
+            return []
 
-        # First, try longer phrases (2-3 consecutive words)
-        # by checking if any scientific_name is contained in the question
-        docs = list(
-            self.collection.find(
-                {}, {"_id": 1, "scientific_name": 1, "common_name_vi": 1}
-            )
-        )
-
+        docs = self._species_lookup_docs()
+        alias_owners: dict[str, set[str]] = {}
         for doc in docs:
-            sci_name = str(doc.get("scientific_name") or "").lower()
-            vi_name = str(doc.get("common_name_vi") or "").lower()
+            doc_id = str(doc.get("_id"))
+            for alias in self._species_aliases(doc):
+                normalized_alias = self._normalize_query_text(alias)
+                if normalized_alias:
+                    alias_owners.setdefault(normalized_alias, set()).add(doc_id)
 
-            # Check if scientific name appears as a substring in the question
-            if sci_name and sci_name in question_lower:
-                return self.collection.find_one({"_id": doc["_id"]})
+        matches: list[tuple[int, int, dict[str, Any]]] = []
+        for doc in docs:
+            best: tuple[int, int] | None = None
+            for alias in self._species_aliases(doc):
+                normalized_alias = self._normalize_query_text(alias)
+                if len(normalized_alias) < 3:
+                    continue
+                if len(alias_owners.get(normalized_alias, set())) != 1:
+                    continue
+                match = re.search(
+                    rf"(?<![a-zA-Z0-9]){re.escape(normalized_alias)}(?![a-zA-Z0-9])",
+                    normalized_question,
+                )
+                if not match:
+                    continue
+                candidate = (match.start(), len(normalized_alias))
+                if best is None or candidate[1] > best[1]:
+                    best = candidate
+            if best is not None:
+                matches.append((best[0], best[1], doc))
 
-            # Check if Vietnamese name appears as substring
-            if vi_name and len(vi_name) > 2 and vi_name in question_lower:
-                return self.collection.find_one({"_id": doc["_id"]})
-
-        # Fallback: try regex match on individual species names
-        query = {
-            "$or": [
-                {"scientific_name": {"$regex": question, "$options": "i"}},
-                {"common_name_vi": {"$regex": question, "$options": "i"}},
-            ]
-        }
-        return self.collection.find_one(query)
+        matches.sort(key=lambda item: (item[0], -item[1]))
+        selected: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        occupied: list[tuple[int, int]] = []
+        for start, length, doc in matches:
+            end = start + length
+            if any(start < used_end and end > used_start for used_start, used_end in occupied):
+                continue
+            doc_id = str(doc.get("_id"))
+            if doc_id in seen_ids:
+                continue
+            selected.append(doc)
+            seen_ids.add(doc_id)
+            occupied.append((start, end))
+        return selected
 
     def resolve_named_entities(self, labels: list[str]) -> list[dict[str, Any]]:
         entities: list[dict[str, Any]] = []
@@ -222,14 +240,30 @@ class SpeciesService:
             label = re.sub(r"\s+", " ", str(raw_label or "")).strip(" .,:;!?")
             if not label:
                 continue
-            exact_doc = self._find_species_by_label(label, exact=True)
-            if exact_doc:
+            exact_docs = self._find_species_exact_matches(label)
+            if len(exact_docs) == 1:
+                exact_doc = exact_docs[0]
                 entities.append(
                     {
                         "label": label,
                         "status": "matched",
                         "doc": exact_doc,
                         "display_name": self._display_species_name(exact_doc),
+                    }
+                )
+                continue
+            if len(exact_docs) > 1:
+                entities.append(
+                    {
+                        "label": label,
+                        "status": "ambiguous",
+                        "doc": None,
+                        "display_name": label,
+                        "candidates": [
+                            self._display_species_name(candidate)
+                            for candidate in exact_docs[:5]
+                        ],
+                        "candidate_docs": exact_docs[:5],
                     }
                 )
                 continue
@@ -241,8 +275,9 @@ class SpeciesService:
                     {
                         "label": label,
                         "status": "nearest_match",
-                        "doc": doc,
+                        "doc": None,
                         "display_name": self._display_species_name(doc),
+                        "candidate_docs": candidates,
                     }
                 )
             elif len(candidates) > 1:
@@ -256,6 +291,7 @@ class SpeciesService:
                             self._display_species_name(candidate)
                             for candidate in candidates
                         ],
+                        "candidate_docs": candidates,
                     }
                 )
             else:
@@ -270,102 +306,247 @@ class SpeciesService:
         return entities
 
     def answer_multi_species_comparison(
-        self, question: str, entities: list[dict[str, Any]]
+        self,
+        question: str,
+        entities: list[dict[str, Any]],
+        intents: list[str] | None = None,
+        fact_overrides: dict[str, dict[str, str]] | None = None,
     ) -> str:
-        normalized = self._normalize_query_text(question)
-        wants_distribution = any(signal in normalized for signal in ["phan bo", "song o", "o dau", "vung"])
-        wants_conservation = any(signal in normalized for signal in ["bao ton", "iucn", "sach do", "nguy cap", "cites"])
-        wants_habitat = any(signal in normalized for signal in ["sinh canh", "moi truong song", "noi song"])
-        wants_diet = any(signal in normalized for signal in ["an gi", "thuc an", "che do an"])
+        fact_overrides = fact_overrides or {}
+        requested = [item for item in (intents or []) if item != "general"]
+        if not requested:
+            requested = ["distribution", "habitat", "diet", "conservation"]
+        supported = [
+            item
+            for item in requested
+            if item
+            in {
+                "name",
+                "scientific_name",
+                "taxonomy",
+                "group",
+                "occurrence",
+                "distribution",
+                "habitat",
+                "diet",
+                "conservation",
+                "threats",
+                "population_trend",
+                "behavior",
+                "identification",
+                "reproduction",
+            }
+        ]
+        if not supported:
+            supported = ["distribution", "habitat", "diet", "conservation"]
 
-        if not any([wants_distribution, wants_conservation, wants_habitat, wants_diet]):
-            wants_distribution = wants_conservation = wants_habitat = wants_diet = True
-
-        lines = ["**So sánh các loài được hỏi:**"]
-        for entity in entities:
-            label = entity.get("label") or entity.get("display_name") or "Loài được hỏi"
-            status = entity.get("status")
-            doc = entity.get("doc")
-            if not doc:
-                if status == "ambiguous":
-                    candidates = ", ".join(entity.get("candidates") or [])
-                    lines.append(
-                        f"- **{label}:** chưa xác định được một loài duy nhất trong kho dữ liệu. "
-                        f"Các kết quả gần tên: {candidates or 'không có'}."
-                    )
-                else:
-                    lines.append(
-                        f"- **{label}:** chưa có loài khớp trong kho dữ liệu, nên chưa thể so sánh bằng metadata nội bộ."
-                    )
-                continue
-
-            name = self._display_species_name(doc)
-            if status == "nearest_match":
-                heading = f"{label} (khớp gần nhất: {name})"
-            else:
-                heading = name if label in name else f"{label} ({name})"
-            facts: list[str] = []
-            if wants_distribution:
-                facts.append(f"phân bố: {self._resolve_distribution_regions(doc) or 'chưa rõ'}")
-            if wants_habitat:
-                facts.append(f"sinh cảnh: {self._resolve_habitat(doc) or 'chưa rõ'}")
-            if wants_diet:
-                facts.append(f"thức ăn: {self._resolve_diet(doc) or 'chưa rõ'}")
-            if wants_conservation:
-                facts.append(self._format_conservation_fact(doc))
-            lines.append(f"- **{heading}:** " + "; ".join(facts) + ".")
-
-        lines.extend(
-            [
-                "",
-                "**Giới hạn dữ liệu:** Câu trả lời chỉ dùng các loài/entity người dùng nêu trong câu hỏi; entity không khớp MongoDB được giữ nguyên tên và đánh dấu thiếu dữ liệu.",
+        matched = [entity for entity in entities if isinstance(entity.get("doc"), dict)]
+        headers = [self._display_species_name(entity["doc"]) for entity in matched]
+        rows: list[tuple[str, list[str]]] = []
+        for intent in supported:
+            values = [
+                self._comparison_value(
+                    entity["doc"], intent, fact_overrides.get(str(entity["doc"].get("_id")), {})
+                )
+                for entity in matched
             ]
+            rows.append((self._comparison_intent_label(intent), values))
+
+        lines = ["**Bảng so sánh**", ""]
+        lines.append("| Tiêu chí | " + " | ".join(self._escape_table(item) for item in headers) + " |")
+        lines.append("|---|" + "---|" * len(headers))
+        for label, values in rows:
+            lines.append(
+                f"| {self._escape_table(label)} | "
+                + " | ".join(self._escape_table(value or "Chưa có dữ liệu") for value in values)
+                + " |"
+            )
+
+        same: list[str] = []
+        different: list[str] = []
+        for label, values in rows:
+            normalized_values = {
+                self._normalize_query_text(value)
+                for value in values
+                if value and "chua co du lieu" not in self._normalize_query_text(value)
+            }
+            if len(normalized_values) == 1 and len(values) > 1:
+                same.append(label.lower())
+            elif len(normalized_values) > 1:
+                different.append(label.lower())
+
+        lines.extend(["", "**Điểm giống nhau**"])
+        lines.append(
+            "- Các loài có dữ liệu tương đồng về " + ", ".join(same) + "."
+            if same
+            else "- Chưa thấy tiêu chí nào có giá trị hoàn toàn giống nhau trong dữ liệu hiện có."
         )
-        return "\n".join(lines)
-
-    def answer_priority_within_entities(self, entities: list[dict[str, Any]]) -> str:
-        priority = {"CR": 0, "EN": 1, "VU": 2, "NT": 3, "LC": 4, "DD": 5, "NE": 6}
-        ranked: list[tuple[int, str, dict[str, Any]]] = []
-        missing: list[dict[str, Any]] = []
-        for entity in entities:
-            doc = entity.get("doc")
-            label = entity.get("label") or entity.get("display_name") or "Loài được hỏi"
-            if not doc:
-                missing.append(entity)
-                continue
-            status = (self._resolve_conservation_status(doc) or "").upper()
-            ranked.append((priority.get(status, 99), label, entity))
-
-        ranked.sort(key=lambda item: (item[0], item[1]))
-        lines = ["**Ưu tiên bảo tồn trong các loài vừa nêu:**"]
-        if ranked:
-            for index, (_, label, entity) in enumerate(ranked, 1):
-                doc = entity["doc"]
-                status = self._resolve_conservation_status(doc) or "không rõ"
-                name = self._display_species_name(doc)
-                if entity.get("status") == "nearest_match":
-                    display = f"{label} (khớp gần nhất: {name})"
-                else:
-                    display = name if label in name else f"{label} ({name})"
-                lines.append(f"{index}. {display} - IUCN: {status}.")
+        lines.extend(["", "**Điểm khác nhau**"])
+        lines.append(
+            "- Khác biệt được ghi nhận ở " + ", ".join(different) + "."
+            if different
+            else "- Dữ liệu hiện có chưa đủ để xác định khác biệt rõ ràng."
+        )
+        lines.extend(["", "**Kết luận**"])
+        diet_target = self._diet_target_from_comparison_question(question)
+        if "diet" in supported and diet_target:
+            target_aliases = self._diet_target_aliases(diet_target)
+            matching_names = (
+                [
+                    self._display_species_name(entity["doc"])
+                    for entity in matched
+                    if self._contains_any_term(
+                        self._comparison_value(
+                            entity["doc"],
+                            "diet",
+                            fact_overrides.get(str(entity["doc"].get("_id")), {}),
+                        ),
+                        target_aliases,
+                    )
+                ]
+                if target_aliases
+                else []
+            )
+            if matching_names:
+                lines.append(
+                    f"- Theo dữ liệu thức ăn, {', '.join(matching_names)} ăn {diet_target}."
+                )
+            else:
+                lines.append(
+                    f"- Dữ liệu hiện có chưa ghi nhận loài nào trong nhóm ăn {diet_target}."
+                )
+        elif "conservation" in supported:
+            priority = {"CR": 0, "EN": 1, "VU": 2, "NT": 3, "LC": 4, "DD": 5, "NE": 6}
+            ranked = sorted(
+                (
+                    priority.get((self._resolve_conservation_status(entity["doc"]) or "").upper(), 99),
+                    self._display_species_name(entity["doc"]),
+                    self._resolve_conservation_status(entity["doc"]) or "không rõ",
+                )
+                for entity in matched
+            )
+            if ranked and ranked[0][0] < 99:
+                lines.append(
+                    f"- Theo thứ bậc IUCN trong dữ liệu, {ranked[0][1]} có mức cảnh báo cao nhất ({ranked[0][2]})."
+                )
+            else:
+                lines.append("- Chưa đủ dữ liệu IUCN để kết luận loài nào có mức cảnh báo cao hơn.")
         else:
-            lines.append("Chưa có loài nào trong tập vừa hỏi khớp chắc chắn với MongoDB.")
-
-        for entity in missing:
-            label = entity.get("label") or entity.get("display_name") or "Loài được hỏi"
-            if entity.get("status") == "ambiguous":
-                candidates = ", ".join(entity.get("candidates") or [])
-                lines.append(f"- {label}: chưa xếp hạng vì tên còn mơ hồ; kết quả gần tên: {candidates or 'không có'}.")
-            else:
-                lines.append(f"- {label}: chưa xếp hạng vì kho dữ liệu chưa có loài khớp.")
-
-        lines.extend(
-            [
-                "",
-                "**Giới hạn dữ liệu:** Thứ tự chỉ xét các loài/entity trong ngữ cảnh so sánh gần nhất, không phải top toàn bộ cơ sở dữ liệu.",
-            ]
-        )
+            lines.append(
+                f"- So sánh tập trung vào {', '.join(self._comparison_intent_label(item).lower() for item in supported)}; các khác biệt cụ thể được thể hiện trong bảng."
+            )
         return "\n".join(lines)
+
+    def _diet_target_from_comparison_question(self, question: str) -> str | None:
+        match = re.search(
+            r"loài\s+nào\s+ăn\s+(.+?)(?:[?.!]|$)",
+            question or "",
+            flags=re.IGNORECASE,
+        )
+        if match:
+            target = match.group(1).strip(" .,:;!?")
+            if self._normalize_query_text(target) not in {"gi", "nhung gi"}:
+                return target
+
+        normalized = self._normalize_query_text(question)
+        match = re.search(r"loai nao an (.+?)(?:$| thi | trong )", normalized)
+        if match:
+            target = match.group(1).strip()
+            if target not in {"gi", "nhung gi"}:
+                return target
+        return None
+
+    def _diet_target_aliases(self, target: str) -> list[str]:
+        normalized = self._normalize_query_text(target)
+        aliases = {
+            "ca": ["ca", "fish", "fishes", "small fish"],
+            "con trung": ["con trung", "insect", "insects"],
+            "dong vat co vu nho": ["dong vat co vu nho", "small mammal", "small mammals"],
+            "giap xac": ["giap xac", "crustacean", "crustaceans"],
+            "luong cu": ["luong cu", "amphibian", "amphibians"],
+            "bo sat": ["bo sat", "reptile", "reptiles"],
+            "qua": ["qua", "fruit", "fruits"],
+            "co": ["co", "grass", "grasses"],
+        }
+        return aliases.get(normalized, [normalized] if normalized else [])
+
+    def _contains_any_term(self, value: str, terms: list[str]) -> bool:
+        normalized_value = self._normalize_query_text(value)
+        return any(
+            re.search(
+                rf"(?<![a-zA-Z0-9]){re.escape(term)}(?![a-zA-Z0-9])",
+                normalized_value,
+            )
+            for term in terms
+            if term
+        )
+
+    def display_species_name(self, doc: dict[str, Any]) -> str:
+        return self._display_species_name(doc)
+
+    def resolve_hero_image(self, doc: dict[str, Any]) -> str | None:
+        return self._resolve_hero_image(doc)
+
+    def resolve_thumbnail_image(self, doc: dict[str, Any]) -> str | None:
+        return self._resolve_thumbnail_image(doc)
+
+    def _comparison_intent_label(self, intent: str) -> str:
+        return {
+            "name": "Tên thường gọi",
+            "scientific_name": "Tên khoa học",
+            "taxonomy": "Phân loại",
+            "group": "Nhóm loài",
+            "occurrence": "Ghi nhận tại Việt Nam",
+            "distribution": "Phân bố",
+            "habitat": "Sinh cảnh",
+            "diet": "Thức ăn",
+            "conservation": "Bảo tồn",
+            "threats": "Mối đe dọa",
+            "population_trend": "Xu hướng quần thể",
+            "behavior": "Tập tính",
+            "identification": "Nhận dạng",
+            "reproduction": "Sinh sản",
+        }.get(intent, intent)
+
+    def _comparison_value(
+        self, doc: dict[str, Any], intent: str, overrides: dict[str, str]
+    ) -> str:
+        if intent in overrides:
+            return overrides[intent]
+        taxonomy = doc.get("taxonomy") or {}
+        conservation = doc.get("conservation") or {}
+        if intent == "name":
+            return str(doc.get("common_name_vi") or "Chưa có dữ liệu")
+        if intent == "scientific_name":
+            return str(doc.get("scientific_name") or "Chưa có dữ liệu")
+        if intent == "taxonomy":
+            values = [taxonomy.get("class"), taxonomy.get("order"), taxonomy.get("family")]
+            return " - ".join(str(item) for item in values if item) or "Chưa có dữ liệu"
+        if intent == "group":
+            return str(taxonomy.get("class") or "Chưa có dữ liệu")
+        if intent in {"occurrence", "distribution"}:
+            return self._resolve_distribution_regions(doc) or "Chưa có dữ liệu"
+        if intent == "habitat":
+            return self._resolve_habitat(doc) or "Chưa có dữ liệu"
+        if intent == "diet":
+            return self._resolve_diet(doc) or "Chưa có dữ liệu"
+        if intent == "conservation":
+            return self._format_conservation_fact(doc).removeprefix("bảo tồn: ")
+        if intent == "threats":
+            threats = conservation.get("major_threats") or conservation.get("threats")
+            return ", ".join(self._flatten_text_values(threats)) or "Chưa có dữ liệu"
+        if intent == "population_trend":
+            iucn = conservation.get("iucn") or {}
+            return str(iucn.get("population_trend") or "Chưa có dữ liệu")
+        if intent == "behavior":
+            return str(doc.get("behavior") or "Chưa có dữ liệu")
+        if intent == "identification":
+            return str(doc.get("short_description") or doc.get("description") or "Chưa có dữ liệu")
+        return "Chưa có dữ liệu"
+
+    def _escape_table(self, value: str) -> str:
+        compact = re.sub(r"\s+", " ", str(value or "")).strip()
+        return compact.replace("|", "\\|")
 
     def answer_general_query(self, question: str, limit: int = 30) -> str | None:
         normalized = self._normalize_query_text(question)
@@ -507,48 +688,79 @@ class SpeciesService:
         text = re.sub(r"\s+", " ", text).strip().lower()
         return text
 
-    def _find_species_by_label(self, label: str, exact: bool) -> dict[str, Any] | None:
-        escaped = re.escape(label.strip())
-        if not escaped:
-            return None
-        pattern = f"^{escaped}$" if exact else escaped
-        return self.collection.find_one(
-            {
-                "$or": [
-                    {"scientific_name": {"$regex": pattern, "$options": "i"}},
-                    {"common_name_vi": {"$regex": pattern, "$options": "i"}},
-                ]
+    def _find_species_exact_matches(self, label: str) -> list[dict[str, Any]]:
+        normalized_label = self._normalize_query_text(label)
+        if not normalized_label:
+            return []
+        matches: list[dict[str, Any]] = []
+        for doc in self._species_lookup_docs():
+            aliases = {
+                self._normalize_query_text(item) for item in self._species_aliases(doc)
             }
-        )
+            if normalized_label in aliases:
+                matches.append(doc)
+        return matches
 
     def _find_species_candidates_by_label(self, label: str, limit: int = 5) -> list[dict[str, Any]]:
-        escaped = re.escape(label.strip())
-        if not escaped:
+        normalized_label = self._normalize_query_text(label)
+        if not normalized_label:
             return []
-        docs = list(
-            self.collection.find(
-                {
-                    "$or": [
-                        {"common_name_vi": {"$regex": escaped, "$options": "i"}},
-                        {"scientific_name": {"$regex": escaped, "$options": "i"}},
-                    ]
-                },
-                {
-                    "_id": 1,
-                    "scientific_name": 1,
-                    "common_name_vi": 1,
-                    "conservation": 1,
-                    "conservation_status": 1,
-                    "taxonomy": 1,
-                    "distribution": 1,
-                    "ecology": 1,
-                    "region": 1,
-                },
+        ranked: list[tuple[int, str, dict[str, Any]]] = []
+        for doc in self._species_lookup_docs():
+            aliases = [self._normalize_query_text(item) for item in self._species_aliases(doc)]
+            scores = [
+                abs(len(alias) - len(normalized_label))
+                for alias in aliases
+                if normalized_label in alias or alias in normalized_label
+            ]
+            if not scores:
+                continue
+            ranked.append(
+                (
+                    min(scores),
+                    str(doc.get("common_name_vi") or doc.get("scientific_name") or ""),
+                    doc,
+                )
             )
-            .sort([("common_name_vi", 1), ("scientific_name", 1)])
-            .limit(limit)
-        )
-        return docs
+        ranked.sort(key=lambda item: (item[0], item[1]))
+        return [item[2] for item in ranked[:limit]]
+
+    def _species_lookup_docs(self) -> list[dict[str, Any]]:
+        projection = {
+            "_id": 1,
+            "scientific_name": 1,
+            "common_name_vi": 1,
+            "common_name_en": 1,
+            "search_keywords": 1,
+            "conservation": 1,
+            "conservation_status": 1,
+            "taxonomy": 1,
+            "distribution": 1,
+            "ecology": 1,
+            "behavior": 1,
+            "description": 1,
+            "short_description": 1,
+            "region": 1,
+            "image_url": 1,
+            "thumbnail_url": 1,
+            "media_assets": 1,
+        }
+        return list(self.collection.find({}, projection))
+
+    def _species_aliases(self, doc: dict[str, Any]) -> list[str]:
+        values: list[str] = []
+        for key in ("scientific_name", "common_name_vi", "common_name_en"):
+            value = doc.get(key)
+            if isinstance(value, str) and value.strip():
+                values.append(value.strip())
+        keywords = doc.get("search_keywords") or []
+        if isinstance(keywords, list):
+            values.extend(
+                str(item).strip()
+                for item in keywords
+                if isinstance(item, str) and len(item.strip()) >= 4
+            )
+        return self._dedupe_values(values)
 
     def _display_species_name(self, doc: dict[str, Any]) -> str:
         vi_name = str(doc.get("common_name_vi") or "").strip()

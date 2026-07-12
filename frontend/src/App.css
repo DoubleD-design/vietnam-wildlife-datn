@@ -1290,6 +1290,8 @@
 
 .chat-markdown {
   color: inherit;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 .chat-markdown p {
@@ -1317,6 +1319,28 @@
 
 .chat-markdown em {
   font-style: italic;
+}
+
+.chat-markdown table {
+  width: max-content;
+  min-width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 0.92em;
+}
+
+.chat-markdown th,
+.chat-markdown td {
+  max-width: 340px;
+  padding: 8px 10px;
+  border: 1px solid rgba(111, 23, 48, 0.2);
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.chat-markdown th {
+  background: rgba(111, 23, 48, 0.08);
 }
 
 .chat-bubble-loading {

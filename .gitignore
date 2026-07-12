@@ -1,26 +1,113 @@
+# ============================================================
+# WildlifeVN root .gitignore
+# Keep source code, notebooks, reports, and README files.
+# Ignore local environments, secrets, generated data, model weights,
+# build outputs, archives, backups, and caches.
+# ============================================================
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/settings.json
+*.swp
+*.swo
+
+# Secrets / environment files
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# Python environments and caches
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+
+# Hugging Face / model caches
+.hf_cache/
+**/.hf_cache/
+hf_cache/
+**/hf_cache/
+wildlife-ai/.hf_cache/
+
+# Node / frontend build
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Java / Spring build
+wildlife-backend/target/
+wildlife-backend/.mvn/wrapper/maven-wrapper.jar
+
+# Test and generated outputs
+test-results/
+outputs/
+exports/
+logs/
+*.log
+
+# Local database dumps and sync/backup artifacts
+atlas-backup-*/
+mongo-backup/
+mongo-sync-*/
+*.bson
+*.metadata.json
+prelude.json
+
+# Large datasets and generated ML data
 RAG/
 Training/
 Preprocessed/
-.venv/
-.hf_cache/
-**/.env
-**/.env.*
-*.pth
-*.bin
-.DS_Store
-# Node
-frontend/node_modules/
-frontend/dist/
-test-results/
-
-# Java
-wildlife-backend/target/
-
-#AI Server
+Preprocessed/dataset/
+Preprocessed/.venv/
+Training/model/
+Training/Bioclip_166/bioclip_model/
+Training/Wildlife Classification Results/models_preprocessed/
+Training/results_bioclip_v2/models_bioclip_v2/
 wildlife-ai/model/
+wildlife-ai/app/model/
+dataset/
+datasets/
+wildlife_prepared/
 
+# Model weights and vector indexes
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
 
+# Large archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+wildlife-ai-image.tar.gz
+wildlife-backend-image.tar.gz
+wildlifevn-images.tar.gz
 
-.DS_Store
-.vscode/settings.json
-*.md
+# Large generated cache/report files
+RAG/chatbot_runs/*cache*.json
+RAG/chatbot_runs/sach_do_2007_ocr_smoke_images_*/
+RAG/knowledge_base/backups/
+
+# Keep final lightweight notebooks for sharing
+!training-preprocessing-final/
+!training-preprocessing-final/*.ipynb

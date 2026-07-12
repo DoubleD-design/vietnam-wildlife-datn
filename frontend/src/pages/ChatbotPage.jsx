@@ -3,17 +3,21 @@ import { Link, useSearchParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import SpeciesCandidateModal from "../components/SpeciesCandidateModal";
-import { confirmSpecies, queryChatbot } from "../services/chatbotService";
+import {
+  clearSpecies,
+  confirmSpecies,
+  queryChatbot,
+} from "../services/chatbotService";
 import "../App.css";
 
 function readOrCreateSessionId() {
   const key = "chatbot-session-id";
-  const existed = localStorage.getItem(key);
+  const existed = sessionStorage.getItem(key);
   if (existed) {
     return existed;
   }
   const created = `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  localStorage.setItem(key, created);
+  sessionStorage.setItem(key, created);
   return created;
 }
 
@@ -110,28 +114,70 @@ function ChatbotPage() {
     }
 
     didInitializeSpeciesRef.current = true;
-    const activeName = initialSpeciesName || "loài này";
-
-    setMessages([
-      {
-        role: "assistant",
-        text: `Loài đang được hỏi là ${activeName}.`,
-      },
-    ]);
-
     async function initializeActiveSpecies() {
       try {
-        await confirmSpecies({
+        const response = await confirmSpecies({
           sessionId,
           speciesId: initialSpeciesId,
         });
-      } catch {
-        // Keep the optimistic intro message visible even if the API is down.
+        if (
+          !["SPECIES_CONFIRMED", "ANSWERED"].includes(response?.status) ||
+          !response?.activeSpeciesId
+        ) {
+          throw new Error(response?.message || "Không xác nhận được loài từ liên kết.");
+        }
+        setMessages([
+          {
+            role: "assistant",
+            text:
+              response?.message ||
+              `Loài đang được hỏi là ${response.activeSpeciesName || initialSpeciesName}.`,
+          },
+        ]);
+      } catch (error) {
+        try {
+          await clearSpecies({ sessionId });
+        } catch {
+          // The visible error below is sufficient when the API is unavailable.
+        }
+        setMessages([
+          {
+            role: "assistant",
+            text:
+              error?.response?.data?.message ||
+              error?.message ||
+              "Không tìm thấy loài từ liên kết này. Ngữ cảnh cũ đã được xóa.",
+          },
+        ]);
       }
     }
 
     initializeActiveSpecies();
   }, [initialSpeciesId, initialSpeciesName, sessionId]);
+
+  function applyChatbotResponse(response, fallbackText = "Đã nhận yêu cầu.") {
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "assistant",
+        text: response?.answer || response?.message || fallbackText,
+      },
+    ]);
+
+    const candidates = Array.isArray(response?.candidates)
+      ? response.candidates
+      : [];
+    if (
+      response?.status === "NEED_SPECIES_CONFIRM" &&
+      candidates.length > 0
+    ) {
+      setPendingCandidates(candidates.slice(0, 6));
+      setIsModalOpen(true);
+      return;
+    }
+    setIsModalOpen(false);
+    setPendingCandidates([]);
+  }
 
   function handlePickFile(event) {
     const file = event.target.files?.[0];
@@ -233,24 +279,7 @@ function ChatbotPage() {
         imageUrl: imagePayload,
       });
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: response?.answer || response?.message || "Đã nhận yêu cầu.",
-        },
-      ]);
-
-      const candidates = Array.isArray(response?.candidates)
-        ? response.candidates
-        : [];
-      if (
-        response?.status === "NEED_SPECIES_CONFIRM" &&
-        candidates.length > 0
-      ) {
-        setPendingCandidates(candidates.slice(0, 6));
-        setIsModalOpen(true);
-      }
+      applyChatbotResponse(response);
     } catch (error) {
       setMessages((prev) => [
         ...prev,
@@ -279,15 +308,7 @@ function ChatbotPage() {
         speciesId: candidate.speciesId,
       });
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: response?.answer || response?.message || "Đã xác nhận loài.",
-        },
-      ]);
-      setIsModalOpen(false);
-      setPendingCandidates([]);
+      applyChatbotResponse(response, "Đã xác nhận loài.");
     } catch (error) {
       setMessages((prev) => [
         ...prev,
