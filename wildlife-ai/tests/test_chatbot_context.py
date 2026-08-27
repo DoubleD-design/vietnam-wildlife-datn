@@ -7,6 +7,8 @@ import types
 import unittest
 
 os.environ["CEREBRAS_API_KEY"] = ""
+os.environ["ROUTER_EMBEDDING_ENABLED"] = "false"
+os.environ["ROUTER_LLM_ENABLED"] = "false"
 
 fake_image_module = types.ModuleType("app.services.image_recognition_service")
 
@@ -222,6 +224,30 @@ class ConversationFlowTest(unittest.TestCase):
         self.assertNotIn("Bos gaurus", response.answer)
         self.assertEqual(debug["resolvedQuestion"], "Vậy còn Công lục sinh sản như nào?")
 
+    def test_explicit_species_with_pronoun_overrides_previous_focus(self):
+        chatbot = build_chatbot()
+        state = ChatSessionState()
+        chatbot._set_single_focus(state, BO_TOT)
+        state.last_intents = ["habitat"]
+
+        response, debug = chatbot._handle_text_flow(
+            "Công lục thích nghi với môi trường sống của nó như thế nào? Hãy giải thích chi tiết.",
+            state,
+            True,
+        )
+
+        self.assertEqual(response.status, "ANSWERED")
+        self.assertEqual(response.activeSpeciesName, "Công lục")
+        self.assertIn("Pavo muticus", response.answer)
+        self.assertNotIn("Bos gaurus", response.answer)
+        self.assertEqual(debug["contextResolver"], "explicit_species")
+        self.assertEqual(
+            debug["resolvedQuestion"],
+            "Công lục thích nghi với môi trường sống của nó như thế nào? Hãy giải thích chi tiết.",
+        )
+        self.assertTrue(debug["questionPlan"]["requires_generation"])
+        self.assertEqual(debug["questionPlan"]["answer_style"], "explanatory")
+
     def test_elliptical_species_follow_up_inherits_reproduction_intent(self):
         chatbot = build_chatbot()
         state = ChatSessionState()
@@ -296,6 +322,28 @@ class ConversationFlowTest(unittest.TestCase):
         self.assertFalse(
             chatbot._should_route_image_question_to_text("Ảnh này là Bò tót đúng không?")
         )
+
+    def test_query_debug_exposes_router_plan_for_cite_sources_question(self):
+        chatbot = build_chatbot()
+
+        payload = chatbot.query_debug(
+            ChatQueryRequest(
+                sessionId="debug-router",
+                question=(
+                    "Công lục thích nghi với môi trường sống của nó như thế nào? "
+                    "Hãy giải thích chi tiết dựa trên các nguồn dữ liệu hiện có."
+                ),
+            )
+        )
+
+        debug = payload["debug"]
+        self.assertEqual(payload["status"], "ANSWERED")
+        self.assertEqual(payload["activeSpeciesName"], "Công lục")
+        self.assertEqual(debug["routerPlan"]["sourceMode"], "cite_sources")
+        self.assertIn("adaptation_explanation", debug["routerPlan"]["intents"])
+        self.assertTrue(debug["routerPlan"]["requiresGeneration"])
+        self.assertFalse(debug["llmRouterUsed"])
+        self.assertNotEqual(debug["flow"], "source_evidence")
 
     def test_numbered_citations_include_source_name_and_url(self):
         chatbot = build_chatbot()

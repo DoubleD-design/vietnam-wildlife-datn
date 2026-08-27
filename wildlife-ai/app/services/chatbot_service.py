@@ -13,6 +13,7 @@ from app.services.conversation_context_resolver import (
     ContextResolution,
     ConversationContextResolver,
 )
+from app.services.chatbot_router import HybridQuestionRouter
 from app.services.image_recognition_service import ImageRecognitionService
 from app.services.rag_pipeline_service import RagPipelineService
 from app.services.session_store import (
@@ -42,6 +43,7 @@ class ChatbotService:
         self.rag_service = RagPipelineService()
         self.image_recognition = ImageRecognitionService()
         self.context_resolver = ConversationContextResolver()
+        self.question_router = HybridQuestionRouter()
         self.session_store = InMemoryChatSessionStore(
             ttl_seconds=settings.chat_session_ttl_seconds
         )
@@ -400,7 +402,27 @@ class ChatbotService:
                 original_question, state
             )
         if resolution is None:
-            resolution = self.context_resolver.resolve(original_question, state)
+            explicit_mentions = self.species_service.find_species_mentions(
+                original_question
+            )
+            if explicit_mentions and not self._question_needs_focused_context(
+                original_question
+            ):
+                resolution = ContextResolution(
+                    original_question=original_question,
+                    resolved_question=original_question,
+                    resolver="explicit_species",
+                    resolved_entities=[
+                        str(
+                            doc.get("common_name_vi")
+                            or doc.get("scientific_name")
+                            or ""
+                        )
+                        for doc in explicit_mentions
+                    ],
+                )
+            else:
+                resolution = self.context_resolver.resolve(original_question, state)
         if resolution.needs_clarification:
             state.pending_clarification_question = original_question
             state.pending_clarification_entities = list(state.focused_entities)
@@ -418,9 +440,13 @@ class ChatbotService:
             return response, debug if include_debug else None
 
         resolved_question = resolution.resolved_question
-        plan = self._analyze_question(resolved_question)
-        intents = self._intent_names(plan)
         mentioned_docs = self.species_service.find_species_mentions(resolved_question)
+        plan = self._analyze_question(
+            resolved_question,
+            state=state,
+            mentioned_docs=mentioned_docs,
+        )
+        intents = self._intent_names(plan)
         comparison_labels = self._extract_comparison_labels(resolved_question)
         comparison_requested = len(mentioned_docs) >= 2 or len(comparison_labels) >= 2
 
@@ -507,7 +533,7 @@ class ChatbotService:
                 return response, debug if include_debug else None
 
             answer, comparison_debug = self._answer_comparison(
-                resolved_question, entities
+                resolved_question, entities, question_plan=plan
             )
             self._set_comparison_focus(state, entities)
             self._record_turn(
@@ -571,6 +597,10 @@ class ChatbotService:
                 debug = {
                     "flow": "general_metadata",
                     "questionPlan": plan,
+                    "routerPlan": plan.get("router_plan") or {},
+                    "routerTrace": plan.get("router_trace") or [],
+                    "semanticScores": plan.get("semantic_scores") or [],
+                    "llmRouterUsed": bool(plan.get("llm_router_used")),
                     "sources": ["MongoDB species metadata"],
                     "chunks": [],
                     "evidence": [],
@@ -604,6 +634,10 @@ class ChatbotService:
             debug = {
                 "flow": "need_species_context",
                 "questionPlan": plan,
+                "routerPlan": plan.get("router_plan") or {},
+                "routerTrace": plan.get("router_trace") or [],
+                "semanticScores": plan.get("semantic_scores") or [],
+                "llmRouterUsed": bool(plan.get("llm_router_used")),
                 "sources": [],
                 "chunks": [],
                 "evidence": [],
@@ -619,7 +653,10 @@ class ChatbotService:
             return response, debug if include_debug else None
 
         answer, answer_status, debug = self._answer_with_context(
-            resolved_question, active_species, include_debug=include_debug
+            resolved_question,
+            active_species,
+            include_debug=include_debug,
+            question_plan=plan,
         )
 
         if answer_status == "ANSWERED":
@@ -652,12 +689,13 @@ class ChatbotService:
         question: str,
         species: dict | None,
         include_debug: bool = False,
+        question_plan: dict[str, Any] | None = None,
     ) -> tuple[str, str, dict[str, Any] | None]:
         scientific_name = ""
         if species:
             scientific_name = str(species.get("scientific_name") or "")
         q = (question or "").strip()
-        question_plan = self._analyze_question(q)
+        question_plan = question_plan or self._analyze_question(q)
         result = self.rag_service.answer_result(
             q, scientific_name, question_plan=question_plan
         )
@@ -677,9 +715,12 @@ class ChatbotService:
         return answer, result.status, debug
 
     def _answer_comparison(
-        self, question: str, entities: list[dict[str, Any]]
+        self,
+        question: str,
+        entities: list[dict[str, Any]],
+        question_plan: dict[str, Any] | None = None,
     ) -> tuple[str, dict[str, Any]]:
-        plan = self._analyze_question(question)
+        plan = question_plan or self._analyze_question(question)
         intents = self._intent_names(plan)
         overrides: dict[str, dict[str, str]] = {}
         evidence: list[dict[str, Any]] = []
@@ -1131,6 +1172,10 @@ class ChatbotService:
         return {
             "flow": flow,
             "questionPlan": question_plan,
+            "routerPlan": question_plan.get("router_plan") or {},
+            "routerTrace": question_plan.get("router_trace") or [],
+            "semanticScores": question_plan.get("semantic_scores") or [],
+            "llmRouterUsed": bool(question_plan.get("llm_router_used")),
             "retrievalProfile": raw.get("retrieval_profile"),
             "retrievalAlpha": raw.get("retrieval_alpha"),
             "sources": raw.get("sources") or [],
@@ -1214,9 +1259,14 @@ class ChatbotService:
         return starts_with_greeting and any(signal in normalized for signal in help_signals)
 
     def _basic_debug(self, flow: str, question: str) -> dict[str, Any]:
+        question_plan = self._analyze_question(question)
         return {
             "flow": flow,
-            "questionPlan": self._analyze_question(question),
+            "questionPlan": question_plan,
+            "routerPlan": question_plan.get("router_plan") or {},
+            "routerTrace": question_plan.get("router_trace") or [],
+            "semanticScores": question_plan.get("semantic_scores") or [],
+            "llmRouterUsed": bool(question_plan.get("llm_router_used")),
             "sources": [],
             "chunks": [],
             "evidence": [],
@@ -1351,227 +1401,23 @@ class ChatbotService:
         ]
         return not any(signal in normalized for signal in image_identity_signals)
 
-    def _analyze_question(self, question: str) -> dict:
-        normalized = self._normalize_text(question)
-        keyword_map = {
-            "name": [
-                "ten gi",
-                "ten cua loai nay",
-                "ten loai nay la gi",
-                "ten loai",
-                "ten tieng viet",
-                "ten viet",
-                "ten thuong goi",
-                "ten goi",
-                "goi ten",
-                "goi la gi",
-            ],
-            "scientific_name": [
-                "ten khoa hoc",
-                "scientific name",
-                "danh phap",
-            ],
-            "taxonomy": [
-                "thuoc ho nao",
-                "thuoc ho",
-                "family",
-                "phan loai",
-            ],
-            "group": [
-                "thuoc nhom",
-                "nhom chim",
-                "nhom thu",
-                "bo sat",
-                "luong cu",
-                "ca dung khong",
-            ],
-            "occurrence": [
-                "co o viet nam",
-                "co tai viet nam",
-                "o viet nam khong",
-            ],
-            "distribution": [
-                "song o dau",
-                "phan bo",
-                "o dau",
-                "vung nao",
-                "tinh nao",
-                "tai viet nam",
-                "tay nguyen",
-                "bac bo",
-                "trung bo",
-                "nam bo",
-            ],
-            "diet": [
-                "an gi",
-                "an ca",
-                "an con trung",
-                "an thit",
-                "an co",
-                "an qua",
-                "thuc an",
-                "che do an",
-                "san moi",
-                "con moi",
-            ],
-            "habitat": [
-                "song o moi truong",
-                "moi truong nhu the nao",
-                "moi truong",
-                "moi truong song",
-                "sinh canh",
-                "noi song",
-                "noi o",
-                "kieu moi truong",
-                "kieu sinh canh",
-                "song nhu the nao",
-                "rung ngap man",
-                "dat ngap nuoc",
-                "rung nhiet doi",
-                "dong co",
-                "vung nui",
-            ],
-            "altitude": [
-                "do cao",
-                "bao nhieu met",
-                "cao bao nhieu",
-            ],
-            "activity_time": [
-                "ban ngay",
-                "ban dem",
-                "hoat dong luc nao",
-            ],
-            "conservation": [
-                "bao ton",
-                "iucn",
-                "sach do",
-                "nguy cap",
-                "cites",
-                "tuyet chung",
-            ],
-            "threats": [
-                "de doa",
-                "bi de doa",
-                "nguy co",
-            ],
-            "population_trend": [
-                "xu huong quan the",
-                "tang hay giam",
-                "quan the",
-            ],
-            "safety": [
-                "an toan",
-                "an toan voi con nguoi",
-                "con nguoi",
-                "nguy hiem",
-                "nguy hai",
-                "gay hai",
-                "tan cong",
-                "can nguoi",
-                "lam hai",
-                "co doc",
-                "gap loai nay",
-                "ngoai tu nhien",
-                "bi thuong",
-                "mac bay",
-                "cuu ho",
-                "cap cuu",
-                "thu cung",
-                "nuoi",
-            ],
-            "legal": [
-                "buon ban",
-                "mua ban",
-                "trao doi",
-                "van chuyen",
-                "giay phep",
-                "hop phap",
-                "phap ly",
-                "duoc phep",
-            ],
-            "source": [
-                "nguon nao",
-                "nguon thong tin",
-                "link nguon",
-                "lay tu dau",
-                "lay tu dau",
-                "trich dan",
-                "bang chung",
-                "tham khao",
-                "source",
-                "citation",
-            ],
-            "data_quality": [
-                "chac chan nhat",
-                "con thieu",
-                "chua ro",
-                "du lieu",
-                "phan nao",
-            ],
-            "reproduction": [
-                "sinh san",
-                "mua sinh san",
-                "de trung",
-                "de con",
-                "de bao nhieu",
-                "moi lua",
-                "mang thai",
-                "ap trung",
-                "cham soc con non",
-                "truong thanh sinh duc",
-            ],
-            "identification": [
-                "hinh dang",
-                "nhan biet",
-                "dau hieu nhan biet",
-                "con duc",
-                "con cai",
-                "khac biet duc cai",
-            ],
-            "behavior": [
-                "tap tinh",
-                "hanh vi",
-                "hoat dong",
-                "dac diem",
-                "ke thu",
-                "mua nao",
-                "tuoi tho",
-                "di cu",
-                "tieng keu",
-            ],
-        }
-
-        matches: list[tuple[int, str]] = []
-        for intent, keywords in keyword_map.items():
-            positions = [
-                normalized.find(keyword)
-                for keyword in keywords
-                if normalized.find(keyword) >= 0
-            ]
-            if positions:
-                matches.append((min(positions), intent))
-
-        intents: list[str] = []
-        for _, intent in sorted(matches, key=lambda item: item[0]):
-            if intent not in intents:
-                intents.append(intent)
-
-        if not intents:
-            intents = ["general"]
-
-        forbidden = [
-            item
-            for item in ["conservation", "threats", "taxonomy_detail", "behavior", "source"]
-            if item not in intents
+    def _analyze_question(
+        self,
+        question: str,
+        state: ChatSessionState | None = None,
+        mentioned_docs: list[dict[str, Any]] | None = None,
+    ) -> dict:
+        mention_names = [
+            str(doc.get("common_name_vi") or doc.get("scientific_name") or "")
+            for doc in (mentioned_docs or [])
+            if isinstance(doc, dict)
         ]
-        return {
-            "species_required": True,
-            "intents": [
-                {"name": intent, "user_question": question} for intent in intents
-            ],
-            "forbidden_sections": forbidden,
-            "answer_style": "focused" if intents != ["general"] else "general",
-        }
+        router_plan = self.question_router.route(
+            question,
+            state=state,
+            species_mentions=mention_names,
+        )
+        return router_plan.to_question_plan(question)
 
     def _normalize_text(self, text: str) -> str:
         import unicodedata
@@ -1584,3 +1430,22 @@ class ChatbotService:
         normalized = re.sub(r"[^a-zA-Z0-9\s]", " ", normalized)
         normalized = re.sub(r"\s+", " ", normalized).strip().lower()
         return normalized
+
+    def _question_needs_focused_context(self, question: str) -> bool:
+        normalized = self._normalize_text(question)
+        context_markers = [
+            "loai nay",
+            "con nay",
+            "loai kia",
+            "loai con lai",
+            "loai thu nhat",
+            "loai thu hai",
+            "con thu nhat",
+            "con thu hai",
+            "trong hai loai nay",
+            "trong cac loai nay",
+            "cac loai nay",
+            "hai loai nay",
+            "ca hai",
+        ]
+        return any(marker in normalized for marker in context_markers)

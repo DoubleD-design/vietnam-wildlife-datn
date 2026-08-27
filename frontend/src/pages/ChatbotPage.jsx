@@ -10,14 +10,8 @@ import {
 } from "../services/chatbotService";
 import "../App.css";
 
-function readOrCreateSessionId() {
-  const key = "chatbot-session-id";
-  const existed = sessionStorage.getItem(key);
-  if (existed) {
-    return existed;
-  }
+function createSessionId() {
   const created = `session-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-  sessionStorage.setItem(key, created);
   return created;
 }
 
@@ -57,7 +51,7 @@ function ChatbotPage() {
   const [searchParams] = useSearchParams();
   const initialSpeciesId = searchParams.get("speciesId") || "";
   const initialSpeciesName = searchParams.get("speciesName") || "";
-  const [sessionId] = useState(() => readOrCreateSessionId());
+  const [sessionId] = useState(() => createSessionId());
   const [question, setQuestion] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [selectedFilePreview, setSelectedFilePreview] = useState("");

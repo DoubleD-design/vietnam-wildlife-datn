@@ -1387,6 +1387,19 @@ INTENT_KEYWORDS = {
         "behavior",
         "activity",
     ],
+    "adaptation_explanation": [
+        "thich nghi",
+        "thich ung",
+        "giai thich",
+        "vi sao",
+        "tai sao",
+        "habitat",
+        "sinh canh",
+        "moi truong song",
+        "distribution",
+        "phan bo",
+        "behavior",
+    ],
 }
 
 
@@ -1497,6 +1510,7 @@ def _intent_title(intent: str) -> str:
         "reproduction": "Sinh sản",
         "identification": "Nhận dạng",
         "behavior": "Tập tính",
+        "adaptation_explanation": "Giải thích thích nghi",
         "general": "Trả lời",
     }.get(intent, intent)
 
@@ -1523,6 +1537,7 @@ def _intent_description(intent: str) -> str:
         "reproduction": "trả lời thông tin sinh sản, nêu các dữ kiện được sử dụng và giải thích lập luận; không nêu độ chắc chắn",
         "identification": "trả lời dấu hiệu hình thái hoặc cách nhận biết loài",
         "behavior": "trả lời tập tính, hoạt động hoặc đặc điểm hành vi",
+        "adaptation_explanation": "giải thích cách loài thích nghi hoặc phù hợp với sinh cảnh/môi trường sống dựa trên dữ kiện hiện có",
         "general": "trả lời trực tiếp câu hỏi",
     }.get(intent, "trả lời đúng ý này")
 
@@ -1531,6 +1546,17 @@ def _build_question_plan_instruction(question_plan: dict[str, Any] | None) -> st
     intents = _question_plan_intents(question_plan)
     if not intents or intents == ["general"]:
         return None
+    answer_style = ""
+    requires_generation = False
+    source_mode = ""
+    if isinstance(question_plan, dict):
+        answer_style = str(question_plan.get("answer_style") or "").strip()
+        requires_generation = bool(question_plan.get("requires_generation"))
+        source_mode = str(
+            question_plan.get("source_mode")
+            or question_plan.get("sourceMode")
+            or ""
+        ).strip()
 
     forbidden = []
     if isinstance(question_plan, dict):
@@ -1563,6 +1589,21 @@ def _build_question_plan_instruction(question_plan: dict[str, Any] | None) -> st
         lines.append(
             "- Chỉ dùng dữ liệu trong THÔNG TIN THAM KHẢO và FACT CẤU TRÚC ƯU TIÊN."
         )
+    if requires_generation or answer_style == "explanatory":
+        lines.extend(
+            [
+                "- Người dùng đang yêu cầu giải thích/lập luận, không chỉ liệt kê fact.",
+                "- Phải nêu rõ dữ kiện nào được dùng và giải thích ngắn mối liên hệ giữa dữ kiện đó với kết luận.",
+                "- Nếu dữ liệu chỉ có sinh cảnh/phân bố mà không có cơ chế thích nghi cụ thể, hãy nói rõ giới hạn này thay vì viết như chắc chắn.",
+            ]
+        )
+    if source_mode == "cite_sources":
+        lines.extend(
+            [
+                "- Người dùng muốn câu trả lời dựa trên nguồn/dữ liệu hiện có; hãy dùng nguồn làm căn cứ cho lập luận.",
+                "- Không biến câu trả lời thành danh sách catalog nguồn trừ khi câu hỏi trực tiếp yêu cầu liệt kê nguồn.",
+            ]
+        )
     lines.extend(
         [
             "- Mỗi mục tối đa 2-3 câu.",
@@ -1583,6 +1624,14 @@ def _build_question_plan_instruction(question_plan: dict[str, Any] | None) -> st
                     "**Căn cứ:** liệt kê các dữ kiện đã sử dụng và ghi rõ từng dữ kiện là từ RAG hay kiến thức nền của mô hình.",
                     "**Lập luận:** giải thích ngắn cách đi từ dữ kiện đến kết quả.",
                     "- Không nêu độ chắc chắn và không tạo URL/nguồn không có trong thông tin tham khảo.",
+                ]
+            )
+        elif requires_generation or answer_style == "explanatory":
+            lines.extend(
+                [
+                    f"**{_intent_title(intent)}:** trả lời trực tiếp trọng tâm câu hỏi.",
+                    "**Dữ kiện dùng để giải thích:** liệt kê 2-4 dữ kiện từ FACT/RAG.",
+                    "**Giải thích:** nối các dữ kiện trên thành lập luận ngắn; không viết tổng quan lan man.",
                 ]
             )
         else:
@@ -1772,8 +1821,32 @@ def rag_query(
     total_started = time.perf_counter()
     clean_question = _strip_control_prefix(question)
     intents = _question_plan_intents(question_plan)
+    requires_generation = bool(
+        isinstance(question_plan, dict) and question_plan.get("requires_generation")
+    )
+    source_mode = ""
+    if isinstance(question_plan, dict):
+        source_mode = str(
+            question_plan.get("source_mode")
+            or question_plan.get("sourceMode")
+            or ""
+        ).strip()
     search_query = clean_question
-    is_source_query = _detect_source_query(clean_question)
+    source_requested = (
+        source_mode == "source_catalog"
+        or (
+            not source_mode
+            and ("source" in intents or _detect_source_query(clean_question))
+        )
+    )
+    domain_intents = [
+        intent for intent in intents if intent not in {"source", "data_quality"}
+    ]
+    is_source_query = source_mode == "source_catalog" or (
+        source_requested
+        and source_mode != "cite_sources"
+        and not (requires_generation and bool(domain_intents))
+    )
     is_facet = not species_name and _detect_facet_query(clean_question)
     alpha = ALPHA_FACET if is_facet else ALPHA_ENTITY
     profile = "source" if is_source_query and species_name else ("facet" if is_facet else "entity")
@@ -1813,7 +1886,6 @@ def rag_query(
             sources.append(label)
     source_quality = _source_quality_summary(sources, species_profile)
     retrieval_warnings = _retrieval_warnings(chunks, species_name)
-
     if is_source_query and species_name:
         answer = _build_source_answer(species_name, species_profile, data_warnings)
         provenance_sources = [
@@ -1850,7 +1922,7 @@ def rag_query(
         question_plan,
         data_warnings,
     )
-    if structured_answer:
+    if structured_answer and not requires_generation:
         provenance_sources = [
             item["name"] for item in _provenance_sources(species_profile) if item.get("name")
         ]

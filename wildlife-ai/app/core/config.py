@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     rag_max_api_retries: int = 3
     rag_max_retry_wait_seconds: int = 3
     rag_generation_timeout_seconds: int = 20
+    router_llm_enabled: bool = True
+    router_model: str = ""
+    router_timeout_seconds: float = 5
+    router_confidence_threshold: float = 0.62
+    router_embedding_enabled: bool = True
+    router_embedding_model: str = "keepitreal/vietnamese-sbert"
     chat_session_ttl_seconds: int = 3600
     chat_history_turn_limit: int = 6
     vision_use_remote_backbone: bool = False

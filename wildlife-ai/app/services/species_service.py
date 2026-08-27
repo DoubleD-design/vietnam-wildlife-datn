@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 import unicodedata
 from typing import Any
 
@@ -17,10 +18,17 @@ from app.models.schemas import (
 
 class SpeciesService:
     def __init__(self) -> None:
-        self.client = MongoClient(settings.mongodb_uri)
+        self.client = MongoClient(
+            settings.mongodb_uri,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+        )
         self.collection = self.client[settings.mongodb_database][
             settings.mongodb_species_collection
         ]
+        self._lookup_cache: list[dict[str, Any]] | None = None
+        self._lookup_cache_loaded_at = 0.0
+        self._lookup_cache_ttl_seconds = 300
 
     def list_species(
         self,
@@ -726,12 +734,20 @@ class SpeciesService:
         return [item[2] for item in ranked[:limit]]
 
     def _species_lookup_docs(self) -> list[dict[str, Any]]:
+        now = time.monotonic()
+        if (
+            self._lookup_cache is not None
+            and now - self._lookup_cache_loaded_at < self._lookup_cache_ttl_seconds
+        ):
+            return [doc.copy() for doc in self._lookup_cache]
+
         projection = {
             "_id": 1,
             "scientific_name": 1,
             "common_name_vi": 1,
             "common_name_en": 1,
             "search_keywords": 1,
+            "group": 1,
             "conservation": 1,
             "conservation_status": 1,
             "taxonomy": 1,
@@ -743,9 +759,11 @@ class SpeciesService:
             "region": 1,
             "image_url": 1,
             "thumbnail_url": 1,
-            "media_assets": 1,
         }
-        return list(self.collection.find({}, projection))
+        docs = list(self.collection.find({}, projection))
+        self._lookup_cache = [doc.copy() for doc in docs]
+        self._lookup_cache_loaded_at = now
+        return docs
 
     def _species_aliases(self, doc: dict[str, Any]) -> list[str]:
         values: list[str] = []
